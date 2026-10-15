@@ -35,8 +35,8 @@ printf '%s\n' "${C_CYAN}${C_BOLD}               ▀████▀${C_RESET}"
 printf '%s\n' "${C_CYAN}${C_BOLD}                 ▀▀${C_RESET}"
 printf '\n'
 printf '%s\n' "       ${C_CYAN}▓▒░${C_RESET} ${C_WHITE}${C_BOLD}V A N G U A R D   V P S${C_RESET} ${C_CYAN}░▒▓${C_RESET}"
-printf '%s\n' "${C_WHITE}${C_BOLD}           Cloud VPS · Railway Ubuntu${C_RESET}"
-printf '%s\n' "${C_YELLOW}${C_BOLD}                Dev · TheFoolByte${C_RESET}"
+printf '%s\n' "${C_WHITE}${C_BOLD}      Cloud VPS · Railway Ubuntu${C_RESET}"
+printf '%s\n' "${C_YELLOW}${C_BOLD}         Dev · TheFoolByte${C_RESET}"
 printf '\n'
 
 line="${C_GREY}  ────────────────────────────────────────────────${C_RESET}"
