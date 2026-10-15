@@ -1,6 +1,6 @@
 #!/bin/bash
-# XD VPS — full backup ⇄ GitHub (9router DB + /root files)
-# Dev: KurrXd
+# VanguardVPS — full backup ⇄ GitHub (9router DB + /root files)
+# Dev: TheFoolByte
 #
 #   src-sync            push now
 #   src-sync --watch    loop every SYNC_INTERVAL (default 180)
@@ -11,18 +11,18 @@ set -u
 
 SRC=/root/src
 NINE=/root/.9router
-STATE=/var/lib/xd
+STATE=/var/lib/vanguard
 MARK="$STATE/src-repo"
 API=https://api.github.com
-XD_CONFIG="${XD_CONFIG:-/etc/xd/config.json}"
+VANGUARD_CONFIG="${VANGUARD_CONFIG:-/etc/vanguard/config.json}"
 cfg() {
-  [ -f "$XD_CONFIG" ] || return 0
-  jq -r "$1 | if . == null then empty else tostring end" "$XD_CONFIG" 2>/dev/null
+  [ -f "$VANGUARD_CONFIG" ] || return 0
+  jq -r "$1 | if . == null then empty else tostring end" "$VANGUARD_CONFIG" 2>/dev/null
 }
 TOKEN="${GITHUB_TOKEN:-}"
 [ -z "$TOKEN" ] && TOKEN="$(cfg .github_token)"
-[ -z "$TOKEN" ] && [ -f /var/lib/xd/github-token ] \
-    && TOKEN="$(cat /var/lib/xd/github-token 2>/dev/null)"
+[ -z "$TOKEN" ] && [ -f /var/lib/vanguard/github-token ] \
+    && TOKEN="$(cat /var/lib/vanguard/github-token 2>/dev/null)"
 INTERVAL="${SYNC_INTERVAL:-}"
 [ -z "$INTERVAL" ] && INTERVAL="$(cfg .sync_interval)"
 INTERVAL="${INTERVAL:-180}"
@@ -39,8 +39,8 @@ die()  { echo "src-sync: $*" >&2; exit 1; }
 need() { [ -n "$TOKEN" ] || die "GITHUB_TOKEN not set — cannot backup"; }
 
 git_ident() {
-  git config --global user.email "${GITHUB_SYNC_EMAIL:-sync@xdvps.local}" 2>/dev/null
-  git config --global user.name  "${GITHUB_SYNC_NAME:-XD VPS Sync}" 2>/dev/null
+  git config --global user.email "${GITHUB_SYNC_EMAIL:-sync@vanguardvps.local}" 2>/dev/null
+  git config --global user.name  "${GITHUB_SYNC_NAME:-VanguardVPS Sync}" 2>/dev/null
   git config --global init.defaultBranch main 2>/dev/null
   git config --global push.autoSetupRemote true 2>/dev/null
 }
@@ -49,7 +49,7 @@ auto_name() {
   local id="${RAILWAY_PROJECT_ID:-}"
   [ -z "$id" ] && id="$(hostname)"
   echo "$id" | tr -c 'A-Za-z0-9' '-' | tr '[:upper:]' '[:lower:]' | cut -c1-40 \
-    | sed 's/-*$//' | sed 's/^/xd-vps-src-/'
+    | sed 's/-*$//' | sed 's/^/vanguard-vps-src-/'
 }
 
 # GITHUB_REPO: empty | name | owner/name | https://github.com/owner/name.git
@@ -78,13 +78,13 @@ create_repo() {
   local n="$1"
   curl -s --max-time 20 -X POST "$API/user/repos" \
     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-    -d "{\"name\":\"$n\",\"private\":true,\"description\":\"XD VPS full backup — 9router DB + files\",\"auto_init\":false}" \
+    -d "{\"name\":\"$n\",\"private\":true,\"description\":\"VanguardVPS full backup — 9router DB + files\",\"auto_init\":false}" \
     | jq -r '.id // empty' 2>/dev/null
 }
 
 remote_url() { echo "https://$TOKEN@github.com/$1/$2.git"; }
 
-# Sets REPO_OWNER REPO_NAME. Empty GITHUB_REPO → auto xd-vps-src-<id> (create later).
+# Sets REPO_OWNER REPO_NAME. Empty GITHUB_REPO → auto vanguard-vps-src-<id> (create later).
 resolve_repo() {
   local spec u
   spec="$(repo_spec)"

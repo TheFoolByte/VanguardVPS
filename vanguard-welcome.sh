@@ -1,6 +1,6 @@
 #!/bin/bash
-# XD VPS — SSH login banner
-# Dev: KurrXd
+# VanguardVPS — SSH login banner
+# Dev: TheFoolByte
 
 [ -t 1 ] || return 0 2>/dev/null || exit 0
 
@@ -21,15 +21,21 @@ _disk="$(df -h / 2>/dev/null | awk 'NR==2 {print $3 " / " $2 " (" $5 ")"}')"
 _ip="$(hostname -I 2>/dev/null | awk '{print $1}')"; : "${_ip:=n/a}"
 
 printf '\n'
-printf '%s\n' "${C_CYAN}${C_BOLD}  ██╗  ██╗██████╗      ██╗   ██╗██████╗ ███████╗${C_RESET}"
-printf '%s\n' "${C_CYAN}${C_BOLD}  ╚██╗██╔╝██╔══██╗     ██║   ██║██╔══██╗██╔════╝${C_RESET}"
-printf '%s\n' "${C_BLUE}${C_BOLD}   ╚███╔╝ ██║  ██║     ██║   ██║██████╔╝███████╗${C_RESET}"
-printf '%s\n' "${C_BLUE}${C_BOLD}   ██╔██╗ ██║  ██║     ╚██╗ ██╔╝██╔═══╝ ╚════██║${C_RESET}"
-printf '%s\n' "${C_WHITE}${C_BOLD}  ██╔╝ ██╗██████╔╝      ╚████╔╝ ██║     ███████║${C_RESET}"
-printf '%s\n' "${C_WHITE}${C_BOLD}  ╚═╝  ╚═╝╚═════╝        ╚═══╝  ╚═╝     ╚══════╝${C_RESET}"
+printf '%s\n' "${C_CYAN}${C_BOLD}██╗   ██╗ █████╗ ███╗   ██╗ ██████╗ ██╗   ██╗ █████╗ ██████╗ ██████╗ ${C_RESET}"
+printf '%s\n' "${C_CYAN}${C_BOLD}██║   ██║██╔══██╗████╗  ██║██╔════╝ ██║   ██║██╔══██╗██╔══██╗██╔══██╗${C_RESET}"
+printf '%s\n' "${C_BLUE}${C_BOLD}██║   ██║███████║██╔██╗ ██║██║  ███╗██║   ██║███████║██████╔╝██║  ██║${C_RESET}"
+printf '%s\n' "${C_BLUE}${C_BOLD}╚██╗ ██╔╝██╔══██║██║╚██╗██║██║   ██║██║   ██║██╔══██║██╔══██╗██║  ██║${C_RESET}"
+printf '%s\n' "${C_WHITE}${C_BOLD} ╚████╔╝ ██║  ██║██║ ╚████║╚██████╔╝╚██████╔╝██║  ██║██║  ██║██████╔╝${C_RESET}"
+printf '%s\n' "${C_WHITE}${C_BOLD}  ╚═══╝  ╚═╝  ╚═╝╚═╝  ╚═══╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝${C_RESET}"
+printf '%s\n' "${C_WHITE}${C_BOLD}                          ██╗   ██╗██████╗ ███████╗${C_RESET}"
+printf '%s\n' "${C_CYAN}${C_BOLD}                          ██║   ██║██╔══██╗██╔════╝${C_RESET}"
+printf '%s\n' "${C_CYAN}${C_BOLD}                          ██║   ██║██████╔╝███████╗${C_RESET}"
+printf '%s\n' "${C_BLUE}${C_BOLD}                          ╚██╗ ██╔╝██╔═══╝ ╚════██║${C_RESET}"
+printf '%s\n' "${C_WHITE}${C_BOLD}                           ╚████╔╝ ██║     ███████║${C_RESET}"
+printf '%s\n' "${C_WHITE}${C_BOLD}                            ╚═══╝  ╚═╝     ╚══════╝${C_RESET}"
 printf '\n'
 printf '%s\n' "${C_WHITE}${C_BOLD}          Cloud VPS · Railway Ubuntu${C_RESET}"
-printf '%s\n' "${C_YELLOW}${C_BOLD}               Dev · KurrXd${C_RESET}"
+printf '%s\n' "${C_YELLOW}${C_BOLD}               Dev · TheFoolByte${C_RESET}"
 printf '\n'
 
 line="${C_GREY}  ────────────────────────────────────────────────${C_RESET}"
@@ -44,21 +50,21 @@ row " CPU     " "│" "${C_WHITE}${_cpu} ${C_GREY}(${_cores} cores)${C_RESET}"
 row " Memory  " "│" "${C_WHITE}${_mem}${C_RESET}"
 row " Disk    " "│" "${C_WHITE}${_disk}${C_RESET}"
 row " IP      " "│" "${C_WHITE}${_ip}${C_RESET}"
-_hport="$(jq -r '.hermes.dashboard_port // 8686' /etc/xd/config.json 2>/dev/null)"
+_hport="$(jq -r '.hermes.dashboard_port // 8686' /etc/vanguard/config.json 2>/dev/null)"
 : "${_hport:=8686}"
 row " 9router " "│" "${C_GREEN}● :20128${C_RESET}"
 row " Hermes  " "│" "${C_GREEN}● :${_hport}${C_RESET} ${C_GREY}(gateway + web UI)${C_RESET}"
 
-if [ -f /var/lib/xd/src-repo ]; then
-  _repo="$(cat /var/lib/xd/src-repo 2>/dev/null)"
+if [ -f /var/lib/vanguard/src-repo ]; then
+  _repo="$(cat /var/lib/vanguard/src-repo 2>/dev/null)"
   _src="${C_GREEN}● synced → ${C_RESET}${C_WHITE}${_repo}${C_RESET}"
 else
   _src="${C_GREY}● off — set GITHUB_TOKEN to backup${C_RESET}"
 fi
 row " backup  " "│" "${_src}"
 
-if [ -f /var/lib/xd/hermes-repo ]; then
-  _hrepo="$(cat /var/lib/xd/hermes-repo 2>/dev/null)"
+if [ -f /var/lib/vanguard/hermes-repo ]; then
+  _hrepo="$(cat /var/lib/vanguard/hermes-repo 2>/dev/null)"
   _hsrc="${C_GREEN}● synced → ${C_RESET}${C_WHITE}${_hrepo}${C_RESET}"
 else
   _hsrc="${C_GREY}● off — set GITHUB_TOKEN to backup${C_RESET}"

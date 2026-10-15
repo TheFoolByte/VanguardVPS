@@ -10,20 +10,20 @@ set -u
 
 STAGE=/root/src-hermes
 HERMES_DIR=/root/.hermes
-STATE=/var/lib/xd
+STATE=/var/lib/vanguard
 MARK="$STATE/hermes-repo"
 API=https://api.github.com
-XD_CONFIG="${XD_CONFIG:-/etc/xd/config.json}"
+VANGUARD_CONFIG="${VANGUARD_CONFIG:-/etc/vanguard/config.json}"
 
 cfg() {
-  [ -f "$XD_CONFIG" ] || return 0
-  jq -r "$1 | if . == null then empty else tostring end" "$XD_CONFIG" 2>/dev/null
+  [ -f "$VANGUARD_CONFIG" ] || return 0
+  jq -r "$1 | if . == null then empty else tostring end" "$VANGUARD_CONFIG" 2>/dev/null
 }
 
 TOKEN="${GITHUB_TOKEN:-}"
 [ -z "$TOKEN" ] && TOKEN="$(cfg .github_token)"
-[ -z "$TOKEN" ] && [ -f /var/lib/xd/github-token ] \
-    && TOKEN="$(cat /var/lib/xd/github-token 2>/dev/null)"
+[ -z "$TOKEN" ] && [ -f /var/lib/vanguard/github-token ] \
+    && TOKEN="$(cat /var/lib/vanguard/github-token 2>/dev/null)"
 
 INTERVAL="${HERMES_SYNC_INTERVAL:-}"
 [ -z "$INTERVAL" ] && INTERVAL="$(cfg .hermes.sync_interval)"
@@ -44,8 +44,8 @@ die()  { echo "hermes-sync: $*" >&2; exit 1; }
 need() { [ -n "$TOKEN" ] || die "GITHUB_TOKEN not set — cannot backup Hermes"; }
 
 git_ident() {
-  git config --global user.email "${GITHUB_SYNC_EMAIL:-sync@xdvps.local}" 2>/dev/null
-  git config --global user.name  "${GITHUB_SYNC_NAME:-XD VPS Sync}" 2>/dev/null
+  git config --global user.email "${GITHUB_SYNC_EMAIL:-sync@vanguardvps.local}" 2>/dev/null
+  git config --global user.name  "${GITHUB_SYNC_NAME:-VanguardVPS Sync}" 2>/dev/null
   git config --global init.defaultBranch main 2>/dev/null
   git config --global push.autoSetupRemote true 2>/dev/null
 }
@@ -53,8 +53,8 @@ git_ident() {
 auto_name() {
   local id="${RAILWAY_PROJECT_ID:-}"
   [ -z "$id" ] && id="$(hostname)"
-  echo "$id" | tr -c 'A-Za-z0-9' '-' | tr '[:upper:]' '[:lower:]' | cut -c1-35 \
-    | sed 's/-*$//' | sed 's/^/xd-vps-hermes-/'
+  echo "$id" | tr -c 'A-Za-z0-9' '-' | tr '[:upper:]' '[:lower:]' | cut -c1-40 \
+    | sed 's/-*$//' | sed 's/^/vanguard-vps-hermes-/'
 }
 
 repo_spec() {

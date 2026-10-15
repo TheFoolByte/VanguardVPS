@@ -1,5 +1,5 @@
-# XD VPS — Ubuntu 24.04 SSH + 9router
-# Dev: KurrXd
+# VanguardVPS — Ubuntu 24.04 SSH + 9router + Hermes Agent
+# Dev: TheFoolByte
 
 FROM ubuntu:24.04
 
@@ -31,7 +31,7 @@ RUN apt-get update \
 
 RUN locale-gen en_US.UTF-8 id_ID.UTF-8
 
-COPY xd-welcome.sh /etc/profile.d/xd-welcome.sh
+COPY vanguard-welcome.sh /etc/profile.d/vanguard-welcome.sh
 
 ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
@@ -59,17 +59,17 @@ RUN curl -fsSL https://astral.sh/uv/install.sh | sh \
     && uv tool install hermes-agent \
     && ln -sf /root/.local/bin/hermes /usr/local/bin/hermes
 
-COPY static/favicon.svg static/favicon.ico static/patch-favicon.py /usr/local/share/xd/
-RUN sed -i 's/\r$//' /usr/local/share/xd/patch-favicon.py \
-    && python3 /usr/local/share/xd/patch-favicon.py
+COPY static/favicon.svg static/favicon.ico static/patch-favicon.py /usr/local/share/vanguard/
+RUN sed -i 's/\r$//' /usr/local/share/vanguard/patch-favicon.py \
+    && python3 /usr/local/share/vanguard/patch-favicon.py
 
 COPY ssh-user-config.sh /usr/local/bin/ssh-user-config.sh
 COPY usage /usr/local/bin/usage
 COPY src-sync.sh /usr/local/bin/src-sync
 COPY hermes-sync.sh /usr/local/bin/hermes-sync
-COPY config.json /etc/xd/config.json
-RUN sed -i 's/\r$//' /usr/local/bin/ssh-user-config.sh /usr/local/bin/usage /usr/local/bin/src-sync /usr/local/bin/hermes-sync /etc/profile.d/xd-welcome.sh /etc/xd/config.json \
-    && chmod +x /usr/local/bin/ssh-user-config.sh /usr/local/bin/usage /usr/local/bin/src-sync /usr/local/bin/hermes-sync /etc/profile.d/xd-welcome.sh \
+COPY config.json /etc/vanguard/config.json
+RUN sed -i 's/\r$//' /usr/local/bin/ssh-user-config.sh /usr/local/bin/usage /usr/local/bin/src-sync /usr/local/bin/hermes-sync /etc/profile.d/vanguard-welcome.sh /etc/vanguard/config.json \
+    && chmod +x /usr/local/bin/ssh-user-config.sh /usr/local/bin/usage /usr/local/bin/src-sync /usr/local/bin/hermes-sync /etc/profile.d/vanguard-welcome.sh \
     && mkdir -p /root/src /root/src-hermes
 
 EXPOSE 22 20128 8686

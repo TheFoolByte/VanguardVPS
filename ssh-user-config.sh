@@ -1,13 +1,13 @@
 #!/bin/bash
-# XD VPS — boot: load config.json, set root password, start 9router + sshd
-# Dev: KurrXd
+# VanguardVPS — boot: load config.json, set root password, start 9router + sshd
+# Dev: TheFoolByte
 # Edit config.json in the repo (not Railway Variables). Env vars override if set.
 
-XD_CONFIG="${XD_CONFIG:-/etc/xd/config.json}"
+VANGUARD_CONFIG="${VANGUARD_CONFIG:-/etc/vanguard/config.json}"
 
 cfg() {
-    [ -f "$XD_CONFIG" ] || return 0
-    jq -r "$1 | if . == null then empty else tostring end" "$XD_CONFIG" 2>/dev/null
+    [ -f "$VANGUARD_CONFIG" ] || return 0
+    jq -r "$1 | if . == null then empty else tostring end" "$VANGUARD_CONFIG" 2>/dev/null
 }
 
 # Env wins if non-empty; else config.json; else default.
@@ -22,7 +22,7 @@ pick() {
 }
 
 APP_LANG="$(pick APP_LANG .app_lang id)"
-ROOT_PASSWORD="$(pick ROOT_PASSWORD .root_password Kurr123@)"
+ROOT_PASSWORD="$(pick ROOT_PASSWORD .root_password Vanguard123@)"
 SSH_USERNAME="$(pick SSH_USERNAME .ssh_username)"
 SSH_PASSWORD="$(pick SSH_PASSWORD .ssh_password)"
 AUTHORIZED_KEYS="$(pick AUTHORIZED_KEYS .authorized_keys)"
@@ -30,8 +30,8 @@ GITHUB_TOKEN="$(pick GITHUB_TOKEN .github_token)"
 GITHUB_REPO="$(pick GITHUB_REPO .github_repo)"
 SYNC_INTERVAL="$(pick SYNC_INTERVAL .sync_interval 180)"
 export APP_LANG ROOT_PASSWORD GITHUB_TOKEN GITHUB_REPO SYNC_INTERVAL
-export GITHUB_SYNC_EMAIL="$(pick GITHUB_SYNC_EMAIL .github_sync_email sync@xdvps.local)"
-export GITHUB_SYNC_NAME="$(pick GITHUB_SYNC_NAME .github_sync_name 'XD VPS Sync')"
+export GITHUB_SYNC_EMAIL="$(pick GITHUB_SYNC_EMAIL .github_sync_email sync@vanguardvps.local)"
+export GITHUB_SYNC_NAME="$(pick GITHUB_SYNC_NAME .github_sync_name 'VanguardVPS Sync')"
 
 NINE_ON="$(cfg .ninerouter.enabled)"; : "${NINE_ON:=true}"
 NINE_PORT="$(cfg .ninerouter.port)"; : "${NINE_PORT:=20128}"
@@ -55,10 +55,10 @@ msg() {
 echo "root:$ROOT_PASSWORD" | chpasswd
 msg "Root password set — ssh root@<host> -p <port>" \
     "Password root siap — ssh root@<host> -p <port>"
-echo "XD VPS  |  user: root  |  password: $ROOT_PASSWORD"
-echo "config  |  $XD_CONFIG"
+echo "VanguardVPS  |  user: root  |  password: $ROOT_PASSWORD"
+echo "config       |  $VANGUARD_CONFIG"
 
-STATE=/var/lib/xd
+STATE=/var/lib/vanguard
 mkdir -p "$STATE"
 [ -f "$STATE/deploy-start" ] || date +%s > "$STATE/deploy-start"
 

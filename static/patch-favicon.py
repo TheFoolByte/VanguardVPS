@@ -4,8 +4,8 @@ import shutil
 import subprocess
 import sys
 
-svg = Path("/usr/local/share/xd/favicon.svg")
-ico = Path("/usr/local/share/xd/favicon.ico")
+svg = Path("/usr/local/share/vanguard/favicon.svg")
+ico = Path("/usr/local/share/vanguard/favicon.ico")
 
 
 def npm_cmd(*args):
@@ -77,6 +77,6 @@ for pkg in pkgs:
         shutil.copyfile(ico, dest / "favicon.ico")
         n += 1
 
-print("xd favicon patched", n)
+print("vanguard favicon patched", n)
 if n == 0:
     sys.exit("9router public files not found")

@@ -1,12 +1,12 @@
 {
-  "name": "XD VPS · Ubuntu SSH + 9router",
-  "description": "Ubuntu 24.04 SSH VPS di Railway. Root langsung, password default Kurr123@. Setup AI di UI web 9router. Dev: KurrXd.",
-  "readme": "# Railway Ubuntu Docker\n\nUbuntu SSH + 9router di Railway. Klik Deploy, variabel boleh kosong.\n\nPassword default: `Kurr123@`\n\n- SSH TCP port 22\n- 9router HTTP port 20128\n- Backup opsional: `GITHUB_TOKEN` + `GITHUB_REPO` (kosong = auto-buat repo)\n\nRepo: https://github.com/asepbalon121221/RailwayUBUNTUDOCKER\n\n© XD VPS · KurrXd",
+  "name": "VanguardVPS · Ubuntu SSH + 9router + Hermes Agent",
+  "description": "Ubuntu 24.04 SSH VPS di Railway dengan Hermes Agent & 9router AI gateway. Akses root langsung. Setup AI di UI web 9router & Hermes Dashboard. Dev: TheFoolByte.",
+  "readme": "# VanguardVPS — Cloud AI Workspace\n\nUbuntu SSH + 9router + Hermes Agent di Railway. Klik Deploy, variabel boleh kosong.\n\nPassword default: `Vanguard123@`\n\n- SSH TCP port 22\n- 9router HTTP port 20128\n- Hermes Dashboard port 8686\n- Dual Auto-Backup: `GITHUB_TOKEN` + `GITHUB_REPO` / `HERMES_GITHUB_REPO`\n\nRepo: https://github.com/TheFoolByte/RailDK\n\n© VanguardVPS · TheFoolByte",
   "services": [
     {
-      "name": "xd-vps",
+      "name": "vanguard-vps",
       "source": {
-        "repo": "https://github.com/asepbalon121221/RailwayUBUNTUDOCKER",
+        "repo": "https://github.com/TheFoolByte/RailDK",
         "branch": "main"
       },
       "build": {
@@ -18,8 +18,9 @@
           "ssh-user-config.sh",
           "src-sync.sh",
           "usage",
-          "xd-welcome.sh",
-          "config.json"
+          "vanguard-welcome.sh",
+          "config.json",
+          "hermes-sync.sh"
         ]
       },
       "deploy": {
@@ -37,8 +38,8 @@
         "ROOT_PASSWORD": {
           "required": false,
           "secret": true,
-          "defaultValue": "Kurr123@",
-          "description": "Password root + login dashboard 9router. Kosong = Kurr123@."
+          "defaultValue": "Vanguard123@",
+          "description": "Password root + login dashboard 9router & Hermes. Kosong = Vanguard123@."
         },
         "GITHUB_TOKEN": {
           "required": false,
@@ -48,7 +49,7 @@
         "GITHUB_REPO": {
           "required": false,
           "secret": false,
-          "description": "Repo backup: owner/name atau URL. Kosong = auto-buat xd-vps-src-<id>. Launch: restore sekali, lalu auto-backup."
+          "description": "Repo backup: owner/name atau URL. Kosong = auto-buat vanguard-vps-src-<id>. Launch: restore sekali, lalu auto-backup."
         },
         "AUTHORIZED_KEYS": {
           "required": false,
@@ -80,7 +81,7 @@
         "HERMES_GITHUB_REPO": {
           "required": false,
           "secret": false,
-          "description": "Repo privat backup Hermes (state.db, memory, config). Kosong = auto buat xd-vps-hermes-<id>."
+          "description": "Repo privat backup Hermes (state.db, memory, config). Kosong = auto buat vanguard-vps-hermes-<id>."
         },
         "HERMES_DASHBOARD_PORT": {
           "required": false,
@@ -98,22 +99,22 @@
     }
   ],
   "proxy": {
-    "application": "xd-vps",
+    "application": "vanguard-vps",
     "ports": [
       {
         "port": 22,
         "protocol": "tcp",
-        "service": "xd-vps"
+        "service": "vanguard-vps"
       },
       {
         "port": 20128,
         "protocol": "http",
-        "service": "xd-vps"
+        "service": "vanguard-vps"
       },
       {
         "port": 8686,
         "protocol": "http",
-        "service": "xd-vps"
+        "service": "vanguard-vps"
       }
     ]
   }

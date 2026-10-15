@@ -1,4 +1,4 @@
-# Railway Ubuntu Docker — Cloud AI Workspace (Hermes Agent + 9router)
+# VanguardVPS — Cloud AI Workspace (Hermes Agent + 9router)
 
 Ubuntu 24.04 SSH VPS di [Railway](https://railway.com) lengkap dengan:
 - **[Hermes Agent](https://github.com/NousResearch/hermes-agent)**: AI Autonomous Agent (CLI, Web Dashboard port 8686, & Messaging Gateway untuk Telegram / Discord / WhatsApp).
@@ -40,8 +40,8 @@ Buka Service kamu di Railway → Masuk ke tab **Variables** → Tambahkan variab
 | `AUTHORIZED_KEYS` | Opsional | SSH Public Key (ed25519 / rsa) agar bisa login SSH tanpa ketik password. |
 | `HERMES_ENABLED` | Opsional | `true` (default) untuk mengaktifkan Hermes Agent. |
 | `HERMES_DASHBOARD_PORT` | Opsional | Port web dashboard Hermes (default `8686`). |
-| `HERMES_GITHUB_REPO` | Opsional | Nama private repo backup Hermes. Jika dikosongkan, otomatis membuat `xd-vps-hermes-<project-id>`. |
-| `GITHUB_REPO` | Opsional | Nama private repo backup 9router. Jika dikosongkan, otomatis membuat `xd-vps-src-<project-id>`. |
+| `HERMES_GITHUB_REPO` | Opsional | Nama private repo backup Hermes. Jika dikosongkan, otomatis membuat `vanguard-vps-hermes-<project-id>`. |
+| `GITHUB_REPO` | Opsional | Nama private repo backup 9router. Jika dikosongkan, otomatis membuat `vanguard-vps-src-<project-id>`. |
 
 > **Keamanan:** Railway Variables memiliki prioritas tertinggi dan secara otomatis menimpa file `config.json`. Kode di GitHub tetap aman dan bersih tanpa ada token/password yang terekspos.
 
@@ -94,8 +94,8 @@ Buka Public Domain Railway port **20128** di browser.
 
 Setiap kali Railway melakukan rebuild atau pindah container baru, data kamu tidak akan hilang:
 
-1. **Repo 1 (`xd-vps-src-...`)**: Mem-backup database 9router dan file `/root`.
-2. **Repo 2 (`xd-vps-hermes-...`)**: Mem-backup seluruh direktori `~/.hermes/` (riwayat percakapan SQLite `state.db`, memori persisten, custom skills, dan konfigurasi API keys).
+1. **Repo 1 (`vanguard-vps-src-...`)**: Mem-backup database 9router dan file `/root`.
+2. **Repo 2 (`vanguard-vps-hermes-...`)**: Mem-backup seluruh direktori `~/.hermes/` (riwayat percakapan SQLite `state.db`, memori persisten, custom skills, dan konfigurasi API keys).
 
 Saat container pertama kali menyala (*booting*), kedua repositori ini otomatis di-*pull* dan di-*restore*, lalu *watcher background* akan otomatis melakukan sinkronisasi berkala ke GitHub setiap 180 detik.
 
