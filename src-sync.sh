@@ -228,7 +228,8 @@ do_restore() {
     && { echo "no repo $REPO_OWNER/$REPO_NAME yet — skip restore, will create on first backup"; return 0; }
   if [ -d "$SRC/.git" ]; then
     git -C "$SRC" remote set-url origin "$(remote_url "$REPO_OWNER" "$REPO_NAME")"
-    git -C "$SRC" pull --ff-only 2>/dev/null || true
+    git -C "$SRC" pull --rebase --autostash 2>/dev/null \
+      || echo "src-sync: restore pull failed" >&2
   elif [ -z "$(ls -A "$SRC" 2>/dev/null)" ]; then
     git clone "$(remote_url "$REPO_OWNER" "$REPO_NAME")" "$SRC" 2>&1 | tail -2
   else
@@ -252,7 +253,18 @@ do_push() {
   local out
   out=$(git -C "$SRC" push -u origin HEAD 2>&1)
   case "$out" in
-    *"fatal"*|*"error:"*|*"denied"*|*"not found"*) echo "src-sync: PUSH FAILED — $out" >&2; return 1 ;;
+    *"rejected"*|*"non-fast-forward"*)
+      # A redeploy can overlap the outgoing container, leaving the backup repo
+      # diverged. The staged tree is the snapshot we want, so it wins.
+      git -C "$SRC" fetch -q origin 2>/dev/null || true
+      out=$(git -C "$SRC" push --force-with-lease -u origin HEAD 2>&1)
+      case "$out" in
+        *"fatal"*|*"error:"*|*"denied"*|*"not found"*)
+          echo "src-sync: PUSH FAILED — $out" >&2; return 1 ;;
+      esac
+      echo "src-sync: diverged history — snapshot force-pushed" >&2 ;;
+    *"fatal"*|*"error:"*|*"denied"*|*"not found"*)
+      echo "src-sync: PUSH FAILED — $out" >&2; return 1 ;;
   esac
 }
 
