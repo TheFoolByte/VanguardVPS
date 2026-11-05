@@ -90,17 +90,26 @@ gh_user() {
 }
 
 repo_exists() {
-  local u="$1" n="$2"
-  curl -s --max-time 12 -H "Authorization: Bearer $TOKEN" "$API/repos/$u/$n" \
-    | jq -r '.id // empty' 2>/dev/null
+  local u="$1" n="$2" code
+  code=$(curl -s -o /tmp/gh-repo.json -w '%{http_code}' --max-time 12 \
+    -H "Authorization: Bearer $TOKEN" "$API/repos/$u/$n" 2>/dev/null)
+  case "$code" in
+    200) jq -r '.id // empty' /tmp/gh-repo.json 2>/dev/null ;;
+    404) return 0 ;;                       # genuinely absent
+    *) die "GitHub API $code on $u/$n — check token scope/access" ;;
+  esac
 }
 
 create_repo() {
-  local n="$1"
-  curl -s --max-time 20 -X POST "$API/user/repos" \
+  local n="$1" code
+  code=$(curl -s -o /tmp/gh-new.json -w '%{http_code}' --max-time 20 -X POST "$API/user/repos" \
     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-    -d "{\"name\":\"$n\",\"private\":true,\"description\":\"VanguardVPS full backup — 9router DB + files\",\"auto_init\":false}" \
-    | jq -r '.id // empty' 2>/dev/null
+    -d "{\"name\":\"$n\",\"private\":true,\"description\":\"VanguardVPS full backup — 9router DB + files\",\"auto_init\":false}" 2>/dev/null)
+  case "$code" in
+    201) jq -r '.id // empty' /tmp/gh-new.json 2>/dev/null ;;
+    422) echo "exists" ;;                  # already there
+    *) die "cannot create repo $n (HTTP $code) — a fine-grained token cannot create repos; create it on GitHub and set GITHUB_REPO, or use a classic token with 'repo' scope" ;;
+  esac
 }
 
 remote_url() { echo "https://github.com/$1/$2.git"; }
@@ -240,13 +249,20 @@ do_push() {
   git -C "$SRC" diff --cached --quiet && { echo "backup: nothing to sync"; return 0; }
   git -C "$SRC" commit -q -m "auto-backup $(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null
   git -C "$SRC" pull --rebase --autostash 2>/dev/null || true
-  git -C "$SRC" push -u origin HEAD 2>&1 | tail -3
+  local out
+  out=$(git -C "$SRC" push -u origin HEAD 2>&1)
+  case "$out" in
+    *"fatal"*|*"error:"*|*"denied"*|*"not found"*) echo "src-sync: PUSH FAILED — $out" >&2; return 1 ;;
+  esac
 }
 
 do_watch() {
   need
   echo "src-sync: watching 9router DB + /root every ${INTERVAL}s"
-  while true; do do_push >/dev/null 2>&1; sleep "$INTERVAL"; done
+  while true; do
+    out=$(do_push 2>&1) || printf '%s\n' "$out"
+    sleep "$INTERVAL"
+  done
 }
 
 do_status() {
