@@ -43,6 +43,27 @@ git_ident() {
   git config --global user.name  "${GITHUB_SYNC_NAME:-VanguardVPS Sync}" 2>/dev/null
   git config --global init.defaultBranch main 2>/dev/null
   git config --global push.autoSetupRemote true 2>/dev/null
+  cred_setup
+}
+
+# Keep the token out of git config: remote URLs stay credential-free and the
+# token is handed to git at request time by a helper reading the 600-mode file.
+cred_setup() {
+  [ -n "$TOKEN" ] || return 0
+  mkdir -p "$STATE"
+  printf '%s' "$TOKEN" > "$STATE/github-token"
+  chmod 600 "$STATE/github-token"
+  git config --global credential.helper \
+    '!f() { echo username=x-access-token; echo "password=$(cat /var/lib/vanguard/github-token)"; }; f' 2>/dev/null
+}
+
+# Strip credentials from a remote URL written by an older release.
+clean_remote() {
+  local d="$1" u
+  u=$(git -C "$d" remote get-url origin 2>/dev/null) || return 0
+  case "$u" in
+    *@github.com*) git -C "$d" remote set-url origin "$(printf '%s' "$u" | sed -E 's#//[^@]+@#//#')" 2>/dev/null ;;
+  esac
 }
 
 auto_name() {
@@ -82,7 +103,7 @@ create_repo() {
     | jq -r '.id // empty' 2>/dev/null
 }
 
-remote_url() { echo "https://$TOKEN@github.com/$1/$2.git"; }
+remote_url() { echo "https://github.com/$1/$2.git"; }
 
 # Sets REPO_OWNER REPO_NAME. Empty GITHUB_REPO → auto vanguard-vps-src-<id> (create later).
 resolve_repo() {
@@ -149,6 +170,8 @@ snapshot() {
   fi
   rsync -a --delete --max-size=90m \
     --exclude 'src/' \
+    --exclude 'src-hermes/' \
+    --exclude '.hermes/' \
     --exclude '.9router/' \
     --exclude '.cache/' \
     --exclude '.npm/' \
@@ -211,6 +234,7 @@ do_push() {
   need
   [ -d "$SRC/.git" ] || do_init >/dev/null
   git_ident
+  clean_remote "$SRC"
   snapshot
   git -C "$SRC" add -A
   git -C "$SRC" diff --cached --quiet && { echo "backup: nothing to sync"; return 0; }

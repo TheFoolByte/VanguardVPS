@@ -48,6 +48,25 @@ git_ident() {
   git config --global user.name  "${GITHUB_SYNC_NAME:-VanguardVPS Sync}" 2>/dev/null
   git config --global init.defaultBranch main 2>/dev/null
   git config --global push.autoSetupRemote true 2>/dev/null
+  cred_setup
+}
+
+# Token stays in a 600-mode file; remote URLs carry no credentials.
+cred_setup() {
+  [ -n "$TOKEN" ] || return 0
+  mkdir -p "$STATE"
+  printf '%s' "$TOKEN" > "$STATE/github-token"
+  chmod 600 "$STATE/github-token"
+  git config --global credential.helper \
+    '!f() { echo username=x-access-token; echo "password=$(cat /var/lib/vanguard/github-token)"; }; f' 2>/dev/null
+}
+
+clean_remote() {
+  local d="$1" u
+  u=$(git -C "$d" remote get-url origin 2>/dev/null) || return 0
+  case "$u" in
+    *@github.com*) git -C "$d" remote set-url origin "$(printf '%s' "$u" | sed -E 's#//[^@]+@#//#')" 2>/dev/null ;;
+  esac
 }
 
 auto_name() {
@@ -86,7 +105,7 @@ create_repo() {
     | jq -r '.id // empty' 2>/dev/null
 }
 
-remote_url() { echo "https://$TOKEN@github.com/$1/$2.git"; }
+remote_url() { echo "https://github.com/$1/$2.git"; }
 
 resolve_repo() {
   local spec u
@@ -207,6 +226,7 @@ do_push() {
   need
   [ -d "$STAGE/.git" ] || do_init >/dev/null
   git_ident
+  clean_remote "$STAGE"
   snapshot
   git -C "$STAGE" add -A
   git -C "$STAGE" diff --cached --quiet && { echo "hermes-backup: nothing to sync"; return 0; }

@@ -55,7 +55,7 @@ msg() {
 echo "root:$ROOT_PASSWORD" | chpasswd
 msg "Root password set — ssh root@<host> -p <port>" \
     "Password root siap — ssh root@<host> -p <port>"
-echo "VanguardVPS  |  user: root  |  password: $ROOT_PASSWORD"
+echo "VanguardVPS  |  user: root  |  password: (set from ROOT_PASSWORD, not logged)"
 echo "config       |  $VANGUARD_CONFIG"
 
 STATE=/var/lib/vanguard

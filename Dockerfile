@@ -54,10 +54,15 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && npm install -g --allow-scripts=9router 9router
 
 # Install uv & Hermes Agent
+# NOTE: /root is a Railway volume at runtime, so anything installed under /root
+# (uv's default tool dir) disappears once the volume mounts. Keep the tool tree
+# and its binaries outside /root.
+ENV UV_TOOL_DIR=/opt/uv-tools \
+    UV_TOOL_BIN_DIR=/usr/local/bin
 RUN curl -fsSL https://astral.sh/uv/install.sh | sh \
-    && mv /root/.local/bin/uv /root/.local/bin/uvx /usr/local/bin/ 2>/dev/null || true \
+    && { mv /root/.local/bin/uv /root/.local/bin/uvx /usr/local/bin/ || true; } \
     && uv tool install hermes-agent \
-    && ln -sf /root/.local/bin/hermes /usr/local/bin/hermes
+    && hermes --version
 
 COPY static/favicon.svg static/favicon.ico static/patch-favicon.py /usr/local/share/vanguard/
 RUN sed -i 's/\r$//' /usr/local/share/vanguard/patch-favicon.py \
