@@ -38,8 +38,8 @@ ENV LC_ALL=en_US.UTF-8
 ENV LANGUAGE=en_US.UTF-8
 ENV TERM=xterm-256color
 
-# Node.js current LTS + npm usable as root
-RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
+# Node.js 22 LTS (pinned; includes corepack) + npm usable as root
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
