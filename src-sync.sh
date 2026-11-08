@@ -168,12 +168,18 @@ EOF
 snapshot() {
   mkdir -p "$SRC/9router" "$SRC/files"
   write_gitignore
-  if [ -n "${ROOT_PASSWORD:-}" ] && command -v curl >/dev/null 2>&1; then
+  if command -v curl >/dev/null 2>&1 && command -v node >/dev/null 2>&1; then
     local json_tmp="$SRC/.backup-export.json.tmp"
     local json_backup="$SRC/9router-backup.json"
-    local code
-    code=$(curl -sS --max-time 30 -o "$json_tmp" -w '%{http_code}' \
-      -H "x-9r-password: $ROOT_PASSWORD" "http://127.0.0.1:${NINE_PORT:-20128}/api/settings/database" 2>/dev/null) || code=000
+    local machine_id="${NINE_DIR:-$NINE}/machine-id"
+    local cli_secret="${NINE_DIR:-$NINE}/auth/cli-secret"
+    local cli_token code
+    cli_token=$(node -e 'const fs=require("fs"),c=require("crypto");const [m,s]=process.argv.slice(1).map(f=>fs.readFileSync(f,"utf8").trim());if(!m||!s)process.exit(1);process.stdout.write(c.createHash("sha256").update(m+"9r-cli-auth"+s).digest("hex").slice(0,16))' "$machine_id" "$cli_secret" 2>/dev/null) || cli_token=""
+    code=000
+    if [ -n "$cli_token" ]; then
+      code=$(curl -sS --max-time 30 -o "$json_tmp" -w '%{http_code}' \
+        -H "x-9r-cli-token: $cli_token" "http://127.0.0.1:${NINE_PORT:-20128}/api/settings/database" 2>/dev/null) || code=000
+    fi
     if [ "$code" = 200 ] && jq -e 'type == "object" and (.providerConnections|type == "array") and (.combos|type == "array")' "$json_tmp" >/dev/null 2>&1; then
       mv "$json_tmp" "$json_backup"
       chmod 600 "$json_backup"
