@@ -29,7 +29,7 @@ AUTHORIZED_KEYS="$(pick AUTHORIZED_KEYS .authorized_keys)"
 GITHUB_TOKEN="$(pick GITHUB_TOKEN .github_token)"
 GITHUB_REPO="$(pick GITHUB_REPO .github_repo)"
 SYNC_INTERVAL="$(pick SYNC_INTERVAL .sync_interval 180)"
-export APP_LANG ROOT_PASSWORD GITHUB_TOKEN GITHUB_REPO SYNC_INTERVAL
+export APP_LANG ROOT_PASSWORD GITHUB_TOKEN GITHUB_REPO SYNC_INTERVAL NINE_PORT NINE_DIR
 export GITHUB_SYNC_EMAIL="$(pick GITHUB_SYNC_EMAIL .github_sync_email sync@vanguardvps.local)"
 export GITHUB_SYNC_NAME="$(pick GITHUB_SYNC_NAME .github_sync_name 'VanguardVPS Sync')"
 

@@ -168,6 +168,20 @@ EOF
 snapshot() {
   mkdir -p "$SRC/9router" "$SRC/files"
   write_gitignore
+  if [ -n "${ROOT_PASSWORD:-}" ] && command -v curl >/dev/null 2>&1; then
+    local json_tmp="$SRC/.backup-export.json.tmp"
+    local json_backup="$SRC/9router-backup.json"
+    local code
+    code=$(curl -sS --max-time 30 -o "$json_tmp" -w '%{http_code}' \
+      -H "x-9r-password: $ROOT_PASSWORD" "http://127.0.0.1:${NINE_PORT:-20128}/api/settings/database" 2>/dev/null) || code=000
+    if [ "$code" = 200 ] && jq -e 'type == "object" and (.providerConnections|type == "array") and (.combos|type == "array")' "$json_tmp" >/dev/null 2>&1; then
+      mv "$json_tmp" "$json_backup"
+      chmod 600 "$json_backup"
+    else
+      rm -f "$json_tmp"
+      echo "src-sync: official JSON export failed (HTTP $code); keeping SQLite snapshot" >&2
+    fi
+  fi
   if [ -d "$NINE" ]; then
     rsync -a --delete --max-size=90m \
       --exclude 'logs/' --exclude 'db/data.sqlite-wal' --exclude 'db/data.sqlite-shm' \
