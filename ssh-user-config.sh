@@ -29,7 +29,7 @@ AUTHORIZED_KEYS="$(pick AUTHORIZED_KEYS .authorized_keys)"
 GITHUB_TOKEN="$(pick GITHUB_TOKEN .github_token)"
 GITHUB_REPO="$(pick GITHUB_REPO .github_repo)"
 SYNC_INTERVAL="$(pick SYNC_INTERVAL .sync_interval 180)"
-export APP_LANG ROOT_PASSWORD GITHUB_TOKEN GITHUB_REPO SYNC_INTERVAL NINE_PORT NINE_DIR
+export APP_LANG ROOT_PASSWORD GITHUB_TOKEN GITHUB_REPO SYNC_INTERVAL
 export GITHUB_SYNC_EMAIL="$(pick GITHUB_SYNC_EMAIL .github_sync_email sync@vanguardvps.local)"
 export GITHUB_SYNC_NAME="$(pick GITHUB_SYNC_NAME .github_sync_name 'VanguardVPS Sync')"
 
@@ -153,18 +153,38 @@ mkdir -p /root/src /root/src-hermes
 if [ -n "$GITHUB_TOKEN" ]; then
     echo "$GITHUB_TOKEN" > "$STATE/github-token"
     chmod 600 "$STATE/github-token"
-    repo=$(/usr/local/bin/src-sync --init 2>/dev/null)
+    if repo=$(/usr/local/bin/src-sync --init 2>&1); then
+        :
+    else
+        msg "$repo" "$repo"
+        exit 1
+    fi
     msg "restore from GitHub once (launch only)..." \
         "restore dari GitHub sekali (saat launch)..."
-    /usr/local/bin/src-sync --restore 2>&1 | while IFS= read -r l; do msg "$l" "$l"; done
+    if restore_log=$(/usr/local/bin/src-sync --restore 2>&1); then
+        while IFS= read -r l; do msg "$l" "$l"; done <<< "$restore_log"
+    else
+        while IFS= read -r l; do msg "$l" "$l"; done <<< "$restore_log"
+        exit 1
+    fi
     msg "backup ON — launch restore then auto-push ⇄ $repo" \
         "backup ON — restore saat launch, lalu auto-backup ⇄ $repo"
 
     # Restore hermes state from its private repo before 9router/hermes starts
-    hrepo=$(/usr/local/bin/hermes-sync --init 2>/dev/null)
+    if hrepo=$(/usr/local/bin/hermes-sync --init 2>&1); then
+        :
+    else
+        msg "$hrepo" "$hrepo"
+        exit 1
+    fi
     msg "restoring Hermes state from private repo $hrepo..." \
         "restore state Hermes dari private repo $hrepo..."
-    /usr/local/bin/hermes-sync --restore 2>&1 | while IFS= read -r l; do msg "$l" "$l"; done
+    if restore_log=$(/usr/local/bin/hermes-sync --restore 2>&1); then
+        while IFS= read -r l; do msg "$l" "$l"; done <<< "$restore_log"
+    else
+        while IFS= read -r l; do msg "$l" "$l"; done <<< "$restore_log"
+        exit 1
+    fi
 else
     msg "No GitHub token in config.json — backup off" \
         "github_token kosong di config.json — backup mati"

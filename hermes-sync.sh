@@ -171,25 +171,40 @@ EOF
 snapshot() {
   mkdir -p "$STAGE/hermes"
   write_gitignore
-  if [ -d "$HERMES_DIR" ]; then
-    rsync -a --delete --max-size=50m \
-      --exclude 'logs/' \
-      --exclude 'audio_cache/' \
-      --exclude 'checkpoints/' \
-      --exclude '.tick.lock' \
-      --exclude 'state.db-wal' \
-      --exclude 'state.db-shm' \
-      "$HERMES_DIR"/ "$STAGE/hermes/" 2>/dev/null || true
-    if [ -f "$HERMES_DIR/state.db" ] && command -v sqlite3 >/dev/null 2>&1; then
-      sqlite3 "$HERMES_DIR/state.db" ".backup '$STAGE/hermes/state.db'" 2>/dev/null || true
-    fi
+  [ -d "$HERMES_DIR" ] || { echo "hermes-sync: missing Hermes data directory $HERMES_DIR" >&2; return 1; }
+  rsync -a --delete --max-size=50m \
+    --exclude 'logs/' \
+    --exclude 'audio_cache/' \
+    --exclude 'checkpoints/' \
+    --exclude '.tick.lock' \
+    --exclude 'state.db-wal' \
+    --exclude 'state.db-shm' \
+    "$HERMES_DIR"/ "$STAGE/hermes/" || { echo "hermes-sync: snapshot rsync failed" >&2; return 1; }
+  if [ -f "$HERMES_DIR/state.db" ]; then
+    command -v sqlite3 >/dev/null 2>&1 || { echo "hermes-sync: sqlite3 missing; refusing partial backup" >&2; return 1; }
+    sqlite3 "$HERMES_DIR/state.db" ".backup '$STAGE/hermes/state.db'" \
+      && [ "$(sqlite3 "$STAGE/hermes/state.db" 'PRAGMA integrity_check;' 2>/dev/null)" = ok ] \
+      || { echo "hermes-sync: SQLite snapshot failed integrity_check" >&2; return 1; }
   fi
 }
 
 apply_restore() {
   if [ -d "$STAGE/hermes" ] && [ -n "$(ls -A "$STAGE/hermes" 2>/dev/null)" ]; then
+    local safety="$STATE/pre-hermes-restore-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+    if [ -d "$HERMES_DIR" ] && [ -n "$(ls -A "$HERMES_DIR" 2>/dev/null)" ]; then
+      mkdir -p "$safety"
+      rsync -a "$HERMES_DIR"/ "$safety/" || { echo "hermes-sync: cannot preserve current state" >&2; return 1; }
+    fi
+    if [ -f "$STAGE/hermes/state.db" ] && command -v sqlite3 >/dev/null 2>&1; then
+      [ "$(sqlite3 "$STAGE/hermes/state.db" 'PRAGMA integrity_check;' 2>/dev/null)" = ok ] \
+        || { echo "hermes-sync: backup SQLite failed integrity_check; refusing restore" >&2; return 1; }
+    fi
     mkdir -p "$HERMES_DIR"
-    rsync -a "$STAGE/hermes"/ "$HERMES_DIR"/ 2>/dev/null || true
+    rsync -a "$STAGE/hermes"/ "$HERMES_DIR"/ || {
+      [ ! -d "$safety" ] || rsync -a --delete "$safety"/ "$HERMES_DIR"/ || true
+      echo "hermes-sync: restore failed; safety copy at $safety" >&2; return 1;
+    }
+    if [ -d "$safety" ]; then rmdir "$safety" 2>/dev/null || true; fi
   fi
 }
 
@@ -221,11 +236,15 @@ do_restore() {
   local url; url="$(remote_url "$REPO_OWNER" "$REPO_NAME")"
   if [ -d "$STAGE/.git" ]; then
     git -C "$STAGE" remote set-url origin "$url" 2>/dev/null || git -C "$STAGE" remote add origin "$url"
-    git -C "$STAGE" fetch origin main 2>/dev/null && git -C "$STAGE" reset --hard origin/main 2>/dev/null \
-      || { rm -rf "$STAGE" && git clone "$url" "$STAGE" 2>&1 | tail -2; }
+    git -C "$STAGE" fetch origin main || die "fetch failed; refusing restore"
+    git -C "$STAGE" reset --hard origin/main || die "checkout failed; refusing restore"
   else
-    rm -rf "$STAGE"
-    git clone "$url" "$STAGE" 2>&1 | tail -2
+    local fresh="${STAGE}.restore-$$"
+    rm -rf "$fresh"
+    git clone "$url" "$fresh" || { rm -rf "$fresh"; die "clone failed; refusing restore"; }
+    [ -d "$fresh/.git" ] || { rm -rf "$fresh"; die "clone produced no git checkout"; }
+    if [ -d "$STAGE" ]; then rmdir "$STAGE" 2>/dev/null || { rm -rf "$fresh"; die "stage exists without git metadata; refusing replace"; }; fi
+    mv "$fresh" "$STAGE" || die "cannot install restored checkout"
   fi
   apply_restore
 }
@@ -236,26 +255,19 @@ do_push() {
   git_ident
   clean_remote "$STAGE"
   snapshot
-  git -C "$STAGE" add -A
-  git -C "$STAGE" diff --cached --quiet && { echo "hermes-backup: nothing to sync"; return 0; }
-  git -C "$STAGE" commit -q -m "hermes auto-backup $(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null
-  git -C "$STAGE" pull --rebase --autostash 2>/dev/null || true
+  git -C "$STAGE" add -A || { echo "hermes-sync: staging failed" >&2; return 1; }
+  if ! git -C "$STAGE" diff --cached --quiet; then
+    git -C "$STAGE" commit -q -m "hermes auto-backup $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      || { echo "hermes-sync: commit failed" >&2; return 1; }
+  fi
+  git -C "$STAGE" pull --rebase --autostash 2>/dev/null \
+    || { git -C "$STAGE" rebase --abort 2>/dev/null || true; echo "hermes-sync: rebase failed; refusing push" >&2; return 1; }
   local out
-  out=$(git -C "$STAGE" push -u origin HEAD 2>&1)
-  case "$out" in
-    *"rejected"*|*"non-fast-forward"*)
-      # A redeploy can overlap the outgoing container, leaving the backup repo
-      # diverged. The staged tree is the snapshot we want, so it wins.
-      git -C "$STAGE" fetch -q origin 2>/dev/null || true
-      out=$(git -C "$STAGE" push --force-with-lease -u origin HEAD 2>&1)
-      case "$out" in
-        *"fatal"*|*"error:"*|*"denied"*|*"not found"*)
-          echo "hermes-sync: PUSH FAILED — $out" >&2; return 1 ;;
-      esac
-      echo "hermes-sync: diverged history — snapshot force-pushed" >&2 ;;
-    *"fatal"*|*"error:"*|*"denied"*|*"not found"*)
-      echo "hermes-sync: PUSH FAILED — $out" >&2; return 1 ;;
-  esac
+  out=$(git -C "$STAGE" push -u origin HEAD 2>&1) || {
+    echo "hermes-sync: PUSH FAILED — remote retained; resolve divergence before retry: $out" >&2
+    return 1
+  }
+  [ -n "$out" ] && echo "$out" || true
 }
 
 do_watch() {

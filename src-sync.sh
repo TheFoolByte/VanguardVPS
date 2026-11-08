@@ -185,17 +185,26 @@ snapshot() {
       chmod 600 "$json_backup"
     else
       rm -f "$json_tmp"
-      echo "src-sync: official JSON export failed (HTTP $code); keeping SQLite snapshot" >&2
+      echo "src-sync: official JSON export failed (HTTP $code); refusing incomplete snapshot" >&2
+      return 1
     fi
   fi
   if [ -d "$NINE" ]; then
-    rsync -a --delete --max-size=90m \
-      --exclude 'logs/' --exclude 'db/data.sqlite-wal' --exclude 'db/data.sqlite-shm' \
-      "$NINE"/ "$SRC/9router/" 2>/dev/null || true
-    if [ -f "$NINE/db/data.sqlite" ] && command -v sqlite3 >/dev/null 2>&1; then
-      mkdir -p "$SRC/9router/db"
-      sqlite3 "$NINE/db/data.sqlite" ".backup '$SRC/9router/db/data.sqlite'" 2>/dev/null || true
-    fi
+    :
+  elif [ -f "$json_backup" ]; then
+    mkdir -p "$NINE"
+  else
+    echo "src-sync: missing 9Router data directory $NINE and no JSON export" >&2; return 1
+  fi
+  rsync -a --delete --max-size=90m \
+    --exclude 'logs/' --exclude 'db/data.sqlite-wal' --exclude 'db/data.sqlite-shm' \
+    "$NINE"/ "$SRC/9router/" || { echo "src-sync: 9Router snapshot rsync failed" >&2; return 1; }
+  if [ -f "$NINE/db/data.sqlite" ]; then
+    command -v sqlite3 >/dev/null 2>&1 || { echo "src-sync: sqlite3 missing; refusing partial backup" >&2; return 1; }
+    mkdir -p "$SRC/9router/db"
+    sqlite3 "$NINE/db/data.sqlite" ".backup '$SRC/9router/db/data.sqlite'" \
+      && [ "$(sqlite3 "$SRC/9router/db/data.sqlite" 'PRAGMA integrity_check;' 2>/dev/null)" = ok ] \
+      || { echo "src-sync: SQLite snapshot failed integrity_check" >&2; return 1; }
   fi
   rsync -a --delete --max-size=90m \
     --exclude 'src/' \
@@ -207,18 +216,37 @@ snapshot() {
     --exclude '.local/' \
     --exclude '.ssh/' \
     --exclude 'node_modules/' \
-    /root/ "$SRC/files/" 2>/dev/null || true
+    /root/ "$SRC/files/" || { echo "src-sync: /root files snapshot rsync failed" >&2; return 1; }
 }
 
 # Apply staged backup onto the live VPS. Call BEFORE starting 9router.
 apply_restore() {
+  local safety="$STATE/pre-restore-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+  mkdir -p "$safety"
+  if [ -d "$NINE" ] && [ -n "$(ls -A "$NINE" 2>/dev/null)" ]; then
+    mkdir -p "$safety/9router"
+    rsync -a "$NINE"/ "$safety/9router/" || { echo "src-sync: cannot preserve current 9Router data" >&2; return 1; }
+  fi
   if [ -d "$SRC/9router" ] && [ -n "$(ls -A "$SRC/9router" 2>/dev/null)" ]; then
+    if [ -f "$SRC/9router/db/data.sqlite" ] && command -v sqlite3 >/dev/null 2>&1; then
+      [ "$(sqlite3 "$SRC/9router/db/data.sqlite" 'PRAGMA integrity_check;' 2>/dev/null)" = ok ] \
+        || { echo "src-sync: backup SQLite failed integrity_check; refusing restore" >&2; return 1; }
+    fi
     mkdir -p "$NINE"
-    rsync -a "$SRC/9router"/ "$NINE"/ 2>/dev/null || true
+    rsync -a "$SRC/9router"/ "$NINE"/ || {
+      [ ! -d "$safety/9router" ] || rsync -a --delete "$safety/9router"/ "$NINE"/ || true
+      echo "src-sync: 9Router restore failed; safety copy at $safety/9router" >&2; return 1;
+    }
   fi
   if [ -d "$SRC/files" ] && [ -n "$(ls -A "$SRC/files" 2>/dev/null)" ]; then
-    rsync -a "$SRC/files"/ /root/ --exclude src 2>/dev/null || true
+    mkdir -p "$safety/files"
+    rsync -a --exclude src --exclude src-hermes /root/ "$safety/files/" || { echo "src-sync: cannot preserve current /root files" >&2; return 1; }
+    rsync -a "$SRC/files"/ /root/ --exclude src --exclude src-hermes || {
+      rsync -a "$safety/files"/ /root/ --exclude src --exclude src-hermes || true
+      echo "src-sync: files restore failed; safety copy at $safety/files" >&2; return 1;
+    }
   fi
+  rmdir "$safety" 2>/dev/null || true
 }
 
 do_init() {
@@ -249,11 +277,15 @@ do_restore() {
   local url; url="$(remote_url "$REPO_OWNER" "$REPO_NAME")"
   if [ -d "$SRC/.git" ]; then
     git -C "$SRC" remote set-url origin "$url" 2>/dev/null || git -C "$SRC" remote add origin "$url"
-    git -C "$SRC" fetch origin main 2>/dev/null && git -C "$SRC" reset --hard origin/main 2>/dev/null \
-      || { rm -rf "$SRC" && git clone "$url" "$SRC" 2>&1 | tail -2; }
+    git -C "$SRC" fetch origin main || die "fetch failed; refusing restore"
+    git -C "$SRC" reset --hard origin/main || die "checkout failed; refusing restore"
   else
-    rm -rf "$SRC"
-    git clone "$url" "$SRC" 2>&1 | tail -2
+    local fresh="${SRC}.restore-$$"
+    rm -rf "$fresh"
+    git clone "$url" "$fresh" || { rm -rf "$fresh"; die "clone failed; refusing restore"; }
+    [ -d "$fresh/.git" ] || { rm -rf "$fresh"; die "clone produced no git checkout"; }
+    if [ -d "$SRC" ]; then rmdir "$SRC" 2>/dev/null || { rm -rf "$fresh"; die "stage exists without git metadata; refusing replace"; }; fi
+    mv "$fresh" "$SRC" || die "cannot install restored checkout"
   fi
   apply_restore
 }
@@ -264,26 +296,19 @@ do_push() {
   git_ident
   clean_remote "$SRC"
   snapshot
-  git -C "$SRC" add -A
-  git -C "$SRC" diff --cached --quiet && { echo "backup: nothing to sync"; return 0; }
-  git -C "$SRC" commit -q -m "auto-backup $(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null
-  git -C "$SRC" pull --rebase --autostash 2>/dev/null || true
+  git -C "$SRC" add -A || { echo "src-sync: staging failed" >&2; return 1; }
+  if ! git -C "$SRC" diff --cached --quiet; then
+    git -C "$SRC" commit -q -m "auto-backup $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      || { echo "src-sync: commit failed" >&2; return 1; }
+  fi
+  git -C "$SRC" pull --rebase --autostash 2>/dev/null \
+    || { git -C "$SRC" rebase --abort 2>/dev/null || true; echo "src-sync: rebase failed; refusing push" >&2; return 1; }
   local out
-  out=$(git -C "$SRC" push -u origin HEAD 2>&1)
-  case "$out" in
-    *"rejected"*|*"non-fast-forward"*)
-      # A redeploy can overlap the outgoing container, leaving the backup repo
-      # diverged. The staged tree is the snapshot we want, so it wins.
-      git -C "$SRC" fetch -q origin 2>/dev/null || true
-      out=$(git -C "$SRC" push --force-with-lease -u origin HEAD 2>&1)
-      case "$out" in
-        *"fatal"*|*"error:"*|*"denied"*|*"not found"*)
-          echo "src-sync: PUSH FAILED — $out" >&2; return 1 ;;
-      esac
-      echo "src-sync: diverged history — snapshot force-pushed" >&2 ;;
-    *"fatal"*|*"error:"*|*"denied"*|*"not found"*)
-      echo "src-sync: PUSH FAILED — $out" >&2; return 1 ;;
-  esac
+  out=$(git -C "$SRC" push -u origin HEAD 2>&1) || {
+    echo "src-sync: PUSH FAILED — remote retained; resolve divergence before retry: $out" >&2
+    return 1
+  }
+  [ -n "$out" ] && echo "$out" || true
 }
 
 do_watch() {
