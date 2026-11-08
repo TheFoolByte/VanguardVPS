@@ -218,16 +218,14 @@ do_restore() {
   resolve_repo || die "cannot resolve repo"
   [ -z "$(repo_exists "$REPO_OWNER" "$REPO_NAME")" ] \
     && { echo "no repo $REPO_OWNER/$REPO_NAME yet — skip restore, will create on first backup"; return 0; }
+  local url; url="$(remote_url "$REPO_OWNER" "$REPO_NAME")"
   if [ -d "$STAGE/.git" ]; then
-    git -C "$STAGE" remote set-url origin "$(remote_url "$REPO_OWNER" "$REPO_NAME")"
-    git -C "$STAGE" pull --rebase --autostash 2>/dev/null \
-      || echo "hermes-sync: restore pull failed" >&2
-  elif [ -z "$(ls -A "$STAGE" 2>/dev/null)" ]; then
-    git clone "$(remote_url "$REPO_OWNER" "$REPO_NAME")" "$STAGE" 2>&1 | tail -2
+    git -C "$STAGE" remote set-url origin "$url" 2>/dev/null || git -C "$STAGE" remote add origin "$url"
+    git -C "$STAGE" fetch origin main 2>/dev/null && git -C "$STAGE" reset --hard origin/main 2>/dev/null \
+      || { rm -rf "$STAGE" && git clone "$url" "$STAGE" 2>&1 | tail -2; }
   else
-    mv "$STAGE" "${STAGE}.local"
-    git clone "$(remote_url "$REPO_OWNER" "$REPO_NAME")" "$STAGE" 2>&1 | tail -2
-    cp -a "${STAGE}.local"/. "$STAGE"/ 2>/dev/null; rm -rf "${STAGE}.local"
+    rm -rf "$STAGE"
+    git clone "$url" "$STAGE" 2>&1 | tail -2
   fi
   apply_restore
 }

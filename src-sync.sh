@@ -226,16 +226,14 @@ do_restore() {
   resolve_repo || die "cannot resolve repo"
   [ -z "$(repo_exists "$REPO_OWNER" "$REPO_NAME")" ] \
     && { echo "no repo $REPO_OWNER/$REPO_NAME yet — skip restore, will create on first backup"; return 0; }
+  local url; url="$(remote_url "$REPO_OWNER" "$REPO_NAME")"
   if [ -d "$SRC/.git" ]; then
-    git -C "$SRC" remote set-url origin "$(remote_url "$REPO_OWNER" "$REPO_NAME")"
-    git -C "$SRC" pull --rebase --autostash 2>/dev/null \
-      || echo "src-sync: restore pull failed" >&2
-  elif [ -z "$(ls -A "$SRC" 2>/dev/null)" ]; then
-    git clone "$(remote_url "$REPO_OWNER" "$REPO_NAME")" "$SRC" 2>&1 | tail -2
+    git -C "$SRC" remote set-url origin "$url" 2>/dev/null || git -C "$SRC" remote add origin "$url"
+    git -C "$SRC" fetch origin main 2>/dev/null && git -C "$SRC" reset --hard origin/main 2>/dev/null \
+      || { rm -rf "$SRC" && git clone "$url" "$SRC" 2>&1 | tail -2; }
   else
-    mv "$SRC" "${SRC}.local"
-    git clone "$(remote_url "$REPO_OWNER" "$REPO_NAME")" "$SRC" 2>&1 | tail -2
-    cp -a "${SRC}.local"/. "$SRC"/ 2>/dev/null; rm -rf "${SRC}.local"
+    rm -rf "$SRC"
+    git clone "$url" "$SRC" 2>&1 | tail -2
   fi
   apply_restore
 }
