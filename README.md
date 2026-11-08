@@ -92,12 +92,14 @@ Buka Public Domain Railway port **20128** di browser.
 
 ## Dual Auto-Backup System
 
-Setiap kali Railway melakukan rebuild atau pindah container baru, data kamu tidak akan hilang:
+Backup berjalan berkala (default **180 detik**; ubah dengan `SYNC_INTERVAL` dan `HERMES_SYNC_INTERVAL`) dan saat perintah backup dipanggil:
 
-1. **Repo 1 (`vanguard-vps-src-...`)**: Mem-backup database 9router dan file `/root`.
-2. **Repo 2 (`vanguard-vps-hermes-...`)**: Mem-backup seluruh direktori `~/.hermes/` (riwayat percakapan SQLite `state.db`, memori persisten, custom skills, dan konfigurasi API keys).
+1. **Repo 9Router**: menyimpan snapshot `~/.9router/`, termasuk database SQLite, secrets, dan file konfigurasi/runtime. Selain itu, `src-sync` mencoba ekspor JSON resmi melalui `GET /api/settings/database` menggunakan `ROOT_PASSWORD`; hasil valid disimpan sebagai `9router-backup.json` di root repo staging.
+2. **Repo Hermes**: menyimpan `~/.hermes/`, termasuk `state.db`, memori, skills, dan konfigurasi.
 
-Saat container pertama kali menyala (*booting*), kedua repositori ini otomatis di-*pull* dan di-*restore*, lalu *watcher background* akan otomatis melakukan sinkronisasi berkala ke GitHub setiap 180 detik.
+Saat container mulai, kedua repo di-restore sebelum layanan 9Router/Hermes berjalan. Ekspor JSON memerlukan API 9Router aktif dan password valid; jika gagal, skrip mencatat peringatan dan tetap melanjutkan snapshot SQLite. JSON berisi kredensial/provider secrets, jadi repo GitHub harus private dan aksesnya dibatasi.
+
+**Catatan riwayat:** backup normal membuat commit baru. Hindari force-push manual karena dapat mengganti riwayat remote.
 
 **Perintah Cek Status Backup (di dalam SSH):**
 ```bash
