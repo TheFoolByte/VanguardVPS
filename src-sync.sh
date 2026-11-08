@@ -228,12 +228,20 @@ apply_restore() {
     rsync -a "$NINE"/ "$safety/9router/" || { echo "src-sync: cannot preserve current 9Router data" >&2; return 1; }
   fi
   if [ -d "$SRC/9router" ] && [ -n "$(ls -A "$SRC/9router" 2>/dev/null)" ]; then
+    local exclude_sqlite=()
     if [ -f "$SRC/9router/db/data.sqlite" ] && command -v sqlite3 >/dev/null 2>&1; then
-      [ "$(sqlite3 "$SRC/9router/db/data.sqlite" 'PRAGMA integrity_check;' 2>/dev/null)" = ok ] \
-        || { echo "src-sync: backup SQLite failed integrity_check; refusing restore" >&2; return 1; }
+      if [ "$(sqlite3 "$SRC/9router/db/data.sqlite" 'PRAGMA integrity_check;' 2>/dev/null)" != ok ]; then
+        if [ -f "$NINE/db/data.sqlite" ]; then
+          echo "src-sync: backup SQLite is corrupt; preserving existing live database" >&2
+          exclude_sqlite=(--exclude db/data.sqlite)
+        else
+          echo "src-sync: backup SQLite is corrupt and no live database exists; refusing restore" >&2
+          return 1
+        fi
+      fi
     fi
     mkdir -p "$NINE"
-    rsync -a "$SRC/9router"/ "$NINE"/ || {
+    rsync -a "${exclude_sqlite[@]}" "$SRC/9router"/ "$NINE"/ || {
       [ ! -d "$safety/9router" ] || rsync -a --delete "$safety/9router"/ "$NINE"/ || true
       echo "src-sync: 9Router restore failed; safety copy at $safety/9router" >&2; return 1;
     }
