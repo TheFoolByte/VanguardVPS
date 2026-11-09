@@ -1,18 +1,23 @@
 #!/bin/bash
-# VanguardVPS — full backup ⇄ GitHub (9router DB + /root files)
+# VanguardVPS — private GitHub backup (9Router JSON + /root files)
 # Dev: TheFoolByte
 #
 #   src-sync            push now
 #   src-sync --watch    loop every SYNC_INTERVAL (default 180)
-#   src-sync --restore  pull + apply onto the VPS
-#   src-sync --init     create/link private repo
+#   src-sync --restore  pull backup and queue JSON restore on a fresh data dir
+#   src-sync --init     create/link a private repo
 #   src-sync --status
+#   --init-identity / --restore-json are boot-only helpers
 set -u
+umask 077
 
-SRC=/root/src
-NINE=/root/.9router
-STATE=/var/lib/vanguard
+SRC="${VANGUARD_SRC_DIR:-/root/src}"
+ROOT_FILES="${VANGUARD_ROOT_FILES_DIR:-/root}"
+NINE="${NINE_DIR:-${DATA_DIR:-/root/.9router}}"
+STATE="${VANGUARD_STATE_DIR:-/var/lib/vanguard}"
+NINE_PORT="${NINE_PORT:-${PORT:-20128}}"
 MARK="$STATE/src-repo"
+PENDING_JSON="$STATE/9router-restore.json"
 API=https://api.github.com
 VANGUARD_CONFIG="${VANGUARD_CONFIG:-/etc/vanguard/config.json}"
 cfg() {
@@ -21,8 +26,8 @@ cfg() {
 }
 TOKEN="${GITHUB_TOKEN:-}"
 [ -z "$TOKEN" ] && TOKEN="$(cfg .github_token)"
-[ -z "$TOKEN" ] && [ -f /var/lib/vanguard/github-token ] \
-    && TOKEN="$(cat /var/lib/vanguard/github-token 2>/dev/null)"
+[ -z "$TOKEN" ] && [ -f "$STATE/github-token" ] \
+    && TOKEN="$(cat "$STATE/github-token" 2>/dev/null)"
 INTERVAL="${SYNC_INTERVAL:-}"
 [ -z "$INTERVAL" ] && INTERVAL="$(cfg .sync_interval)"
 INTERVAL="${INTERVAL:-180}"
@@ -37,6 +42,31 @@ REPO_NAME=""
 
 die()  { echo "src-sync: $*" >&2; exit 1; }
 need() { [ -n "$TOKEN" ] || die "GITHUB_TOKEN not set — cannot backup"; }
+
+cli_token() {
+  node -e 'const fs=require("fs"),c=require("crypto");const [m,s]=process.argv.slice(1).map(f=>fs.readFileSync(f,"utf8").trim());if(!m||!s)process.exit(1);process.stdout.write(c.createHash("sha256").update(m+"9r-cli-auth"+s).digest("hex").slice(0,16))' \
+    "$NINE/machine-id" "$NINE/auth/cli-secret" 2>/dev/null
+}
+
+ensure_identity_file() {
+  local path="$1" tmp="${1}.tmp.$$"
+  if [ -s "$path" ]; then chmod 600 "$path"; return; fi
+  node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("hex")+String.fromCharCode(10))' > "$tmp" \
+    || { rm -f -- "$tmp"; return 1; }
+  chmod 600 "$tmp" && mv -f -- "$tmp" "$path" || { rm -f -- "$tmp"; return 1; }
+}
+
+ensure_cli_identity() {
+  command -v node >/dev/null 2>&1 || die "node is required to initialize 9Router CLI auth"
+  mkdir -p "$NINE/auth" || die "cannot create 9Router auth directory"
+  ensure_identity_file "$NINE/machine-id" || die "cannot initialize 9Router machine identity"
+  ensure_identity_file "$NINE/auth/cli-secret" || die "cannot initialize 9Router CLI secret"
+}
+
+valid_json_export() {
+  jq -e 'type == "object" and (.apiKeys|type == "array") and (.combos|type == "array") and (.customModels|type == "array") and (.mitmAlias|type == "object") and (.modelAliases|type == "object") and (.pricing|type == "object") and (.providerConnections|type == "array") and (.providerNodes|type == "array") and (.proxyPools|type == "array") and (.settings|type == "object")' \
+    "$1" >/dev/null 2>&1
+}
 
 git_ident() {
   git config --global user.email "${GITHUB_SYNC_EMAIL:-sync@vanguardvps.local}" 2>/dev/null
@@ -54,7 +84,7 @@ cred_setup() {
   printf '%s' "$TOKEN" > "$STATE/github-token"
   chmod 600 "$STATE/github-token"
   git config --global credential.helper \
-    '!f() { echo username=x-access-token; echo "password=$(cat /var/lib/vanguard/github-token)"; }; f' 2>/dev/null
+    "!f() { echo username=x-access-token; echo \"password=\$(cat '$STATE/github-token')\"; }; f" 2>/dev/null
 }
 
 # Strip credentials from a remote URL written by an older release.
@@ -90,11 +120,17 @@ gh_user() {
 }
 
 repo_exists() {
-  local u="$1" n="$2" code
-  code=$(curl -s -o /tmp/gh-repo.json -w '%{http_code}' --max-time 12 \
+  local u="$1" n="$2" code response="$STATE/gh-repo.json"
+  mkdir -p "$STATE"
+  code=$(curl -s -o "$response" -w '%{http_code}' --max-time 12 \
     -H "Authorization: Bearer $TOKEN" "$API/repos/$u/$n" 2>/dev/null)
   case "$code" in
-    200) jq -r '.id // empty' /tmp/gh-repo.json 2>/dev/null ;;
+    200)
+      jq -e '.private == true and (.id != null)' "$response" >/dev/null 2>&1 || {
+        echo "src-sync: backup repo must be private; refusing to expose provider credentials" >&2
+        return 1
+      }
+      jq -r '.id // empty' "$response" 2>/dev/null ;;
     404) return 0 ;;                       # genuinely absent
     *) die "GitHub API $code on $u/$n — check token scope/access" ;;
   esac
@@ -104,7 +140,7 @@ create_repo() {
   local n="$1" code
   code=$(curl -s -o /tmp/gh-new.json -w '%{http_code}' --max-time 20 -X POST "$API/user/repos" \
     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-    -d "{\"name\":\"$n\",\"private\":true,\"description\":\"VanguardVPS full backup — 9router DB + files\",\"auto_init\":false}" 2>/dev/null)
+    -d "{\"name\":\"$n\",\"private\":true,\"description\":\"VanguardVPS 9Router JSON + files backup\",\"auto_init\":false}" 2>/dev/null)
   case "$code" in
     201) jq -r '.id // empty' /tmp/gh-new.json 2>/dev/null ;;
     422) echo "exists" ;;                  # already there
@@ -160,131 +196,166 @@ __pycache__/
 *.pyc
 .cache/
 *.log
-9router/logs/
+/9router/
 EOF
 }
 
-# Snapshot live VPS into the git staging tree (does not touch user files in place).
+# The official JSON export is the only 9Router data copied to GitHub.
 snapshot() {
-  mkdir -p "$SRC/9router" "$SRC/files"
-  write_gitignore
-  if command -v curl >/dev/null 2>&1 && command -v node >/dev/null 2>&1; then
-    local json_tmp="$SRC/.backup-export.json.tmp"
-    local json_backup="$SRC/9router-backup.json"
-    local machine_id="${NINE_DIR:-$NINE}/machine-id"
-    local cli_secret="${NINE_DIR:-$NINE}/auth/cli-secret"
-    local cli_token code
-    cli_token=$(node -e 'const fs=require("fs"),c=require("crypto");const [m,s]=process.argv.slice(1).map(f=>fs.readFileSync(f,"utf8").trim());if(!m||!s)process.exit(1);process.stdout.write(c.createHash("sha256").update(m+"9r-cli-auth"+s).digest("hex").slice(0,16))' "$machine_id" "$cli_secret" 2>/dev/null) || cli_token=""
-    code=000
-    if [ -n "$cli_token" ]; then
-      code=$(curl -sS --max-time 30 -o "$json_tmp" -w '%{http_code}' \
-        -H "x-9r-cli-token: $cli_token" "http://127.0.0.1:${NINE_PORT:-20128}/api/settings/database" 2>/dev/null) || code=000
-    fi
-    if [ "$code" = 200 ] && jq -e 'type == "object" and (.providerConnections|type == "array") and (.combos|type == "array")' "$json_tmp" >/dev/null 2>&1; then
-      mv "$json_tmp" "$json_backup"
-      chmod 600 "$json_backup"
-    else
-      rm -f "$json_tmp"
-      echo "src-sync: official JSON export failed (HTTP $code); refusing incomplete snapshot" >&2
-      return 1
-    fi
+  local json_tmp="$SRC/.backup-export.json.tmp.$$"
+  local json_backup="$SRC/9router-backup.json"
+  local token code nine_relative
+  local exclude_nine=()
+  mkdir -p "$SRC/files" "$STATE" || { echo "src-sync: cannot create backup staging paths" >&2; return 1; }
+  write_gitignore || { echo "src-sync: cannot write backup .gitignore" >&2; return 1; }
+  token=$(cli_token) || { echo "src-sync: cannot derive 9Router CLI token" >&2; return 1; }
+  code=$(curl -sS --max-time 30 -o "$json_tmp" -w '%{http_code}' \
+    -H "x-9r-cli-token: $token" "http://127.0.0.1:$NINE_PORT/api/settings/database" 2>/dev/null) || code=000
+  if [ "$code" != 200 ] || ! valid_json_export "$json_tmp"; then
+    rm -f -- "$json_tmp"
+    echo "src-sync: official JSON export failed (HTTP $code or invalid schema); refusing incomplete snapshot" >&2
+    return 1
   fi
-  if [ -d "$NINE" ]; then
-    :
-  elif [ -f "$json_backup" ]; then
-    mkdir -p "$NINE"
-  else
-    echo "src-sync: missing 9Router data directory $NINE and no JSON export" >&2; return 1
-  fi
-  rsync -a --delete --max-size=90m \
-    --exclude 'logs/' --exclude 'db/data.sqlite-wal' --exclude 'db/data.sqlite-shm' \
-    "$NINE"/ "$SRC/9router/" || { echo "src-sync: 9Router snapshot rsync failed" >&2; return 1; }
-  if [ -f "$NINE/db/data.sqlite" ]; then
-    command -v sqlite3 >/dev/null 2>&1 || { echo "src-sync: sqlite3 missing; refusing partial backup" >&2; return 1; }
-    mkdir -p "$SRC/9router/db"
-    sqlite3 "$NINE/db/data.sqlite" ".backup '$SRC/9router/db/data.sqlite'" \
-      && [ "$(sqlite3 "$SRC/9router/db/data.sqlite" 'PRAGMA integrity_check;' 2>/dev/null)" = ok ] \
-      || { echo "src-sync: SQLite snapshot failed integrity_check" >&2; return 1; }
-  fi
+  chmod 600 "$json_tmp" && mv -f -- "$json_tmp" "$json_backup" || {
+    rm -f -- "$json_tmp"
+    echo "src-sync: cannot install JSON backup" >&2; return 1;
+  }
+  git -C "$SRC" rm -r -f --cached --ignore-unmatch -- 9router >/dev/null 2>&1 || {
+    echo "src-sync: cannot untrack legacy 9Router file backup" >&2; return 1;
+  }
+  case "$NINE/" in
+    "$ROOT_FILES"/*) nine_relative="${NINE#"$ROOT_FILES"/}"; exclude_nine=(--exclude "/$nine_relative/") ;;
+  esac
   rsync -a --delete --max-size=90m \
     --exclude 'src/' \
     --exclude 'src-hermes/' \
     --exclude '.hermes/' \
     --exclude '.9router/' \
+    "${exclude_nine[@]}" \
     --exclude '.cache/' \
     --exclude '.npm/' \
     --exclude '.local/' \
     --exclude '.ssh/' \
     --exclude 'node_modules/' \
-    /root/ "$SRC/files/" || { echo "src-sync: /root files snapshot rsync failed" >&2; return 1; }
+    "$ROOT_FILES"/ "$SRC/files/" || { echo "src-sync: /root files snapshot rsync failed" >&2; return 1; }
 }
 
-# Apply staged backup onto the live VPS. Call BEFORE starting 9router.
+# Apply the JSON only to a fresh data directory; never replace an existing DB.
 apply_restore() {
   local safety="$STATE/pre-restore-$(date -u +%Y%m%dT%H%M%SZ)-$$"
-  mkdir -p "$safety"
-  if [ -d "$NINE" ] && [ -n "$(ls -A "$NINE" 2>/dev/null)" ]; then
-    mkdir -p "$safety/9router"
-    rsync -a "$NINE"/ "$safety/9router/" || { echo "src-sync: cannot preserve current 9Router data" >&2; return 1; }
-  fi
-  if [ -d "$SRC/9router" ] && [ -n "$(ls -A "$SRC/9router" 2>/dev/null)" ]; then
-    local exclude_sqlite=()
-    if [ -f "$SRC/9router/db/data.sqlite" ] && command -v sqlite3 >/dev/null 2>&1; then
-      if [ "$(sqlite3 "$SRC/9router/db/data.sqlite" 'PRAGMA integrity_check;' 2>/dev/null)" != ok ]; then
-        if [ -f "$NINE/db/data.sqlite" ]; then
-          echo "src-sync: backup SQLite is corrupt; preserving existing live database" >&2
-          exclude_sqlite=(--exclude db/data.sqlite)
-        else
-          echo "src-sync: backup SQLite is corrupt and no live database exists; refusing restore" >&2
-          return 1
-        fi
+  mkdir -p "$STATE"
+  if [ ! -f "$PENDING_JSON" ] && [ -f "$SRC/9router-backup.json" ]; then
+    if ! valid_json_export "$SRC/9router-backup.json"; then
+      if [ ! -f "$NINE/db/data.sqlite" ]; then
+        echo "src-sync: JSON backup is invalid and no live database exists; refusing restore" >&2; return 1
       fi
+      echo "src-sync: JSON backup is invalid; preserving existing live database" >&2
+    elif [ -f "$NINE/db/data.sqlite" ]; then
+      echo "src-sync: existing 9Router database found; preserving it instead of applying backup JSON"
+    else
+      local pending_tmp="$STATE/.9router-restore-$$.tmp"
+      cp -- "$SRC/9router-backup.json" "$pending_tmp" \
+        && chmod 600 "$pending_tmp" \
+        && mv -f -- "$pending_tmp" "$PENDING_JSON" || {
+          rm -f -- "$pending_tmp"
+          echo "src-sync: cannot queue JSON restore" >&2; return 1;
+        }
+      echo "src-sync: queued JSON restore for first 9Router startup"
     fi
-    mkdir -p "$NINE"
-    rsync -a "${exclude_sqlite[@]}" "$SRC/9router"/ "$NINE"/ || {
-      [ ! -d "$safety/9router" ] || rsync -a --delete "$safety/9router"/ "$NINE"/ || true
-      echo "src-sync: 9Router restore failed; safety copy at $safety/9router" >&2; return 1;
-    }
+  elif [ ! -f "$PENDING_JSON" ] && [ ! -f "$NINE/db/data.sqlite" ] \
+      && [ -d "$SRC/9router" ] && [ -n "$(ls -A "$SRC/9router" 2>/dev/null)" ]; then
+    echo "src-sync: legacy backup has no JSON export; refusing raw SQLite restore" >&2
+    return 1
   fi
   if [ -d "$SRC/files" ] && [ -n "$(ls -A "$SRC/files" 2>/dev/null)" ]; then
     mkdir -p "$safety/files"
-    rsync -a --exclude src --exclude src-hermes /root/ "$safety/files/" || { echo "src-sync: cannot preserve current /root files" >&2; return 1; }
-    rsync -a "$SRC/files"/ /root/ --exclude src --exclude src-hermes || {
-      rsync -a "$safety/files"/ /root/ --exclude src --exclude src-hermes || true
+    rsync -a --exclude src --exclude src-hermes "$ROOT_FILES"/ "$safety/files/" \
+      || { echo "src-sync: cannot preserve current /root files" >&2; return 1; }
+    rsync -a "$SRC/files"/ "$ROOT_FILES"/ --exclude src --exclude src-hermes || {
+      rsync -a "$safety/files"/ "$ROOT_FILES"/ --exclude src --exclude src-hermes || true
       echo "src-sync: files restore failed; safety copy at $safety/files" >&2; return 1;
     }
   fi
   rmdir "$safety" 2>/dev/null || true
 }
 
+do_import_json() {
+  [ -f "$PENDING_JSON" ] || return 0
+  valid_json_export "$PENDING_JSON" || { echo "src-sync: queued JSON backup is invalid; preserving it for recovery" >&2; return 1; }
+  local token tmpdir code=000 error="" providers combos
+  token=$(cli_token) || { echo "src-sync: cannot derive 9Router CLI token" >&2; return 1; }
+  mkdir -p "$STATE" || return 1
+  tmpdir=$(mktemp -d "$STATE/.json-restore.XXXXXX") || return 1
+  case "$tmpdir" in "$STATE"/.json-restore.*) ;; *) echo "src-sync: invalid temporary restore path" >&2; return 1 ;; esac
+  for ((i=0; i<90; i++)); do
+    code=$(curl -sS --connect-timeout 1 --max-time 3 -o /dev/null -w '%{http_code}' \
+      -H "x-9r-cli-token: $token" "http://127.0.0.1:$NINE_PORT/api/settings/database" 2>/dev/null) || code=000
+    [ "$code" = 200 ] && break
+    sleep 1
+  done
+  [ "$code" = 200 ] || error="9Router API did not become ready (HTTP $code)"
+  if [ -z "$error" ]; then
+    code=$(curl -sS --max-time 30 -o "$tmpdir/post.json" -w '%{http_code}' -X POST \
+      -H 'Content-Type: application/json' -H "x-9r-cli-token: $token" \
+      --data-binary "@$PENDING_JSON" "http://127.0.0.1:$NINE_PORT/api/settings/database" 2>/dev/null) || code=000
+    [ "$code" = 200 ] || error="JSON import failed (HTTP $code)"
+  fi
+  if [ -z "$error" ]; then
+    code=$(curl -sS --max-time 30 -o "$tmpdir/export.json" -w '%{http_code}' \
+      -H "x-9r-cli-token: $token" "http://127.0.0.1:$NINE_PORT/api/settings/database" 2>/dev/null) || code=000
+    if [ "$code" != 200 ] || ! valid_json_export "$tmpdir/export.json" \
+        || ! jq -S . "$PENDING_JSON" > "$tmpdir/expected.json" \
+        || ! jq -S . "$tmpdir/export.json" > "$tmpdir/actual.json" \
+        || ! cmp -s "$tmpdir/expected.json" "$tmpdir/actual.json"; then
+      error="JSON restore verification failed (HTTP $code); queued copy retained"
+    fi
+  fi
+  if [ -z "$error" ]; then
+    providers=$(jq '.providerConnections|length' "$tmpdir/export.json")
+    combos=$(jq '.combos|length' "$tmpdir/export.json")
+    rm -f -- "$PENDING_JSON" || error="restored JSON but cannot clear pending marker"
+  fi
+  rm -rf -- "$tmpdir"
+  [ -z "$error" ] || { echo "src-sync: $error" >&2; return 1; }
+  echo "src-sync: JSON restore verified (providers=$providers combos=$combos)"
+}
+
 do_init() {
   need; git_ident; mkdir -p "$SRC"
   resolve_repo || die "cannot resolve repo (set GITHUB_TOKEN / GITHUB_REPO)"
-  local me; me=$(gh_user)
-  if [ -z "$(repo_exists "$REPO_OWNER" "$REPO_NAME")" ]; then
+  local me existing
+  me=$(gh_user)
+  existing=$(repo_exists "$REPO_OWNER" "$REPO_NAME") || die "cannot verify backup repo privacy/access"
+  if [ -z "$existing" ]; then
     if [ -n "$(repo_spec)" ] && [ "$REPO_OWNER" != "$me" ]; then
       die "repo $REPO_OWNER/$REPO_NAME not found — token cannot access it"
     fi
-    create_repo "$REPO_NAME" >/dev/null && echo "created repo $REPO_OWNER/$REPO_NAME" \
-      || die "failed to create repo $REPO_OWNER/$REPO_NAME (token scope = repo)"
+    create_repo "$REPO_NAME" >/dev/null || die "failed to create repo $REPO_OWNER/$REPO_NAME (token scope = repo)"
+    existing=$(repo_exists "$REPO_OWNER" "$REPO_NAME") || die "cannot verify created repo privacy"
+    [ -n "$existing" ] || die "created repo $REPO_OWNER/$REPO_NAME is not accessible"
+    echo "created private repo $REPO_OWNER/$REPO_NAME"
   else
-    echo "repo $REPO_OWNER/$REPO_NAME already exists"
+    echo "private repo $REPO_OWNER/$REPO_NAME already exists"
   fi
   if [ ! -d "$SRC/.git" ]; then git -C "$SRC" init -q; fi
   git -C "$SRC" remote set-url origin "$(remote_url "$REPO_OWNER" "$REPO_NAME")" 2>/dev/null \
-    || git -C "$SRC" remote add origin "$(remote_url "$REPO_OWNER" "$REPO_NAME")"
-  write_gitignore
+    || git -C "$SRC" remote add origin "$(remote_url "$REPO_OWNER" "$REPO_NAME")" \
+    || die "cannot link verified private backup remote"
+  write_gitignore || die "cannot write backup .gitignore"
   echo "$REPO_OWNER/$REPO_NAME"
 }
 
 do_restore() {
   need; git_ident
   resolve_repo || die "cannot resolve repo"
-  [ -z "$(repo_exists "$REPO_OWNER" "$REPO_NAME")" ] \
-    && { echo "no repo $REPO_OWNER/$REPO_NAME yet — skip restore, will create on first backup"; return 0; }
-  local url; url="$(remote_url "$REPO_OWNER" "$REPO_NAME")"
+  local repo_id url
+  repo_id=$(repo_exists "$REPO_OWNER" "$REPO_NAME") || die "cannot verify backup repo privacy/access"
+  [ -n "$repo_id" ] || { echo "no repo $REPO_OWNER/$REPO_NAME yet — skip restore, will create on first backup"; return 0; }
+  url="$(remote_url "$REPO_OWNER" "$REPO_NAME")"
   if [ -d "$SRC/.git" ]; then
-    git -C "$SRC" remote set-url origin "$url" 2>/dev/null || git -C "$SRC" remote add origin "$url"
+    git -C "$SRC" remote set-url origin "$url" 2>/dev/null \
+      || git -C "$SRC" remote add origin "$url" \
+      || die "cannot link verified private backup remote"
     git -C "$SRC" fetch origin main || die "fetch failed; refusing restore"
     git -C "$SRC" reset --hard origin/main || die "checkout failed; refusing restore"
   else
@@ -302,8 +373,16 @@ do_push() {
   need
   [ -d "$SRC/.git" ] || do_init >/dev/null
   git_ident
+  resolve_repo || die "cannot resolve backup repo"
+  local repo_id url
+  repo_id=$(repo_exists "$REPO_OWNER" "$REPO_NAME") || die "cannot verify backup repo privacy/access"
+  [ -n "$repo_id" ] || die "backup repo $REPO_OWNER/$REPO_NAME not found; refusing push"
+  url="$(remote_url "$REPO_OWNER" "$REPO_NAME")"
+  git -C "$SRC" remote set-url origin "$url" 2>/dev/null \
+    || git -C "$SRC" remote add origin "$url" \
+    || die "cannot set verified private backup remote"
   clean_remote "$SRC"
-  snapshot
+  snapshot || return 1
   git -C "$SRC" add -A || { echo "src-sync: staging failed" >&2; return 1; }
   if ! git -C "$SRC" diff --cached --quiet; then
     git -C "$SRC" commit -q -m "auto-backup $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -321,7 +400,7 @@ do_push() {
 
 do_watch() {
   need
-  echo "src-sync: watching 9router DB + /root every ${INTERVAL}s"
+  echo "src-sync: watching 9Router JSON + /root files every ${INTERVAL}s"
   while true; do
     out=$(do_push 2>&1) || printf '%s\n' "$out"
     sleep "$INTERVAL"
@@ -331,7 +410,7 @@ do_watch() {
 do_status() {
   need
   resolve_repo || die "cannot resolve repo"
-  echo "Backup: 9router DB + /root files (restore at launch, then push-only)"
+  echo "Backup: 9Router JSON + /root files (fresh DB only; private repo required)"
   echo "Stage:  $SRC"
   echo "Repo:   $REPO_OWNER/$REPO_NAME"
   echo "Remote: $(git -C "$SRC" remote get-url origin 2>/dev/null || echo '(not linked)')"
@@ -340,10 +419,12 @@ do_status() {
 
 case "${1:-push}" in
   --init)    do_init ;;
+  --init-identity) ensure_cli_identity ;;
   --restore|restore) do_restore ;;
+  --restore-json) do_import_json ;;
   --watch)   do_watch ;;
   --status)  do_status ;;
   --print-repo) print_repo ;;
   push|--push|backup) do_push ;;
-  *) echo "usage: src-sync [backup|restore|--init|--restore|--watch|--status|--print-repo|push]"; exit 1 ;;
+  *) echo "usage: src-sync [backup|restore|--init|--restore|--init-identity|--restore-json|--watch|--status|--print-repo|push]"; exit 1 ;;
 esac

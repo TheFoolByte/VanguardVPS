@@ -94,10 +94,10 @@ Buka Public Domain Railway port **20128** di browser.
 
 Backup berjalan berkala (default **180 detik**; ubah dengan `SYNC_INTERVAL` dan `HERMES_SYNC_INTERVAL`) dan saat perintah backup dipanggil:
 
-1. **Repo 9Router**: menyimpan snapshot `~/.9router/`, termasuk database SQLite, secrets, dan file konfigurasi/runtime. Selain itu, `src-sync` mencoba ekspor JSON resmi melalui `GET /api/settings/database` menggunakan `ROOT_PASSWORD`; hasil valid disimpan sebagai `9router-backup.json` di root repo staging.
-2. **Repo Hermes**: menyimpan `~/.hermes/`, termasuk `state.db`, memori, skills, dan konfigurasi.
+1. **Repo 9Router**: menyimpan satu `9router-backup.json` dari API resmi `/api/settings/database`; raw SQLite, auth identity, dan file runtime `.9router/` tidak ikut disalin. Ekspor/schema yang gagal membatalkan backup, tanpa fallback ke SQLite yang bisa korup.
+2. **Repo Hermes**: tetap menyimpan `~/.hermes/`, termasuk `state.db`, memori, skills, dan konfigurasi.
 
-Saat container mulai, kedua repo di-restore sebelum layanan 9Router/Hermes berjalan. Ekspor JSON memerlukan API 9Router aktif dan password valid; jika gagal, skrip mencatat peringatan dan tetap melanjutkan snapshot SQLite. JSON berisi kredensial/provider secrets, jadi repo GitHub harus private dan aksesnya dibatasi.
+Saat boot, 9Router membuat `machine-id` dan `auth/cli-secret` lokal bila belum ada. JSON diimpor setelah API siap hanya jika database belum ada; database yang sudah ada tidak ditimpa otomatis. Restore diverifikasi dengan export ulang dan perbandingan JSON kanonis. GitHub repo wajib private—`src-sync` menolak repo publik karena JSON berisi provider API keys. Snapshot `/root/files` tetap terpisah, jadi “satu JSON” berarti data 9Router, bukan seluruh isi VPS.
 
 **Catatan riwayat:** backup normal membuat commit baru. Hindari force-push manual karena dapat mengganti riwayat remote.
 

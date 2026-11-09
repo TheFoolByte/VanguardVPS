@@ -38,6 +38,10 @@ NINE_PORT="$(cfg .ninerouter.port)"; : "${NINE_PORT:=20128}"
 NINE_HOST="$(cfg .ninerouter.hostname)"; : "${NINE_HOST:=0.0.0.0}"
 NINE_DIR="$(cfg .ninerouter.data_dir)"; : "${NINE_DIR:=/root/.9router}"
 NINE_KEY="$(cfg .ninerouter.require_api_key)"; : "${NINE_KEY:=true}"
+export NINE_DIR NINE_PORT
+if [ "$NINE_ON" = "true" ] || [ "$NINE_ON" = "1" ]; then
+    /usr/local/bin/src-sync --init-identity || exit 1
+fi
 
 HERMES_ON="$(pick HERMES_ENABLED .hermes.enabled true)"
 HERMES_DASH_PORT="$(pick HERMES_DASHBOARD_PORT .hermes.dashboard_port 8686)"
@@ -101,6 +105,7 @@ start_9router() {
     nohup 9router --no-browser --skip-update >/var/log/9router.log 2>&1 &
     msg "9router UI :$NINE_PORT — login password = root password" \
         "9router UI :$NINE_PORT — password login = password root"
+    /usr/local/bin/src-sync --restore-json || return 1
 }
 
 start_hermes() {
@@ -190,7 +195,7 @@ else
         "github_token kosong di config.json — backup mati"
 fi
 
-start_9router
+start_9router || exit 1
 start_hermes
 
 if [ -n "$GITHUB_TOKEN" ]; then
