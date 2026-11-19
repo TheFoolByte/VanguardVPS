@@ -131,6 +131,12 @@ if [ -n "$GITHUB_TOKEN" ]; then
     nohup /usr/local/bin/src-sync --watch >/var/log/src-sync.log 2>&1 &
 fi
 
+# Volume cleaner: keep the 500MB /root volume lean (cache/temp only, never
+# the 9Router DB, keys, or backup). Runs every 30 min in the background.
+if [ -x /usr/local/bin/vanguard-clean ]; then
+    nohup /usr/local/bin/vanguard-clean >/var/log/vanguard-clean.log 2>&1 &
+fi
+
 msg "Starting SSH server..." "Menyalakan SSH server..."
 ssh-keygen -A 2>/dev/null || true
 exec /usr/sbin/sshd -D

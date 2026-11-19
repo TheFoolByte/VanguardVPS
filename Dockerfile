@@ -38,6 +38,11 @@ ENV LC_ALL=en_US.UTF-8
 ENV LANGUAGE=en_US.UTF-8
 ENV TERM=xterm-256color
 
+# npm cache lives on the big overlay disk (/tmp), NOT on the 500MB /root
+# volume — the 9Router CLI re-installs its SQLite runtime deps at every
+# container start, and the npm cache alone was ~82MB on the volume.
+ENV NPM_CONFIG_CACHE=/tmp/npm-cache
+
 # Node.js 22 LTS (pinned; includes corepack) + npm usable as root
 # 9Router is NOT installed from the official npm package anymore.
 # It is built from Jun's modified fork (TheFoolByte/9router, branch
@@ -80,9 +85,10 @@ RUN sed -i 's/\r$//' /usr/local/share/vanguard/patch-favicon.py \
 COPY ssh-user-config.sh /usr/local/bin/ssh-user-config.sh
 COPY usage /usr/local/bin/usage
 COPY src-sync.sh /usr/local/bin/src-sync
+COPY vanguard-clean.sh /usr/local/bin/vanguard-clean
 COPY config.json /etc/vanguard/config.json
-RUN sed -i 's/\r$//' /usr/local/bin/ssh-user-config.sh /usr/local/bin/usage /usr/local/bin/src-sync /etc/profile.d/vanguard-welcome.sh /etc/vanguard/config.json \
-    && chmod +x /usr/local/bin/ssh-user-config.sh /usr/local/bin/usage /usr/local/bin/src-sync /etc/profile.d/vanguard-welcome.sh \
+RUN sed -i 's/\r$//' /usr/local/bin/ssh-user-config.sh /usr/local/bin/usage /usr/local/bin/src-sync /usr/local/bin/vanguard-clean /etc/profile.d/vanguard-welcome.sh /etc/vanguard/config.json \
+    && chmod +x /usr/local/bin/ssh-user-config.sh /usr/local/bin/usage /usr/local/bin/src-sync /usr/local/bin/vanguard-clean /etc/profile.d/vanguard-welcome.sh \
     && mkdir -p /root/src
 
 EXPOSE 22 20128
