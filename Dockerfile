@@ -48,7 +48,7 @@ ENV NPM_CONFIG_CACHE=/tmp/npm-cache
 # It is built from Jun's modified fork (TheFoolByte/9router, branch
 # neo-brutalism — Second Brain, Live or Not, neo-brutalism UI) and installed
 # globally from its cli/ package, so the `9router` command keeps working.
-# Verified fork head: 31c8567 (neo-brutalism, Live or Not gate). The fork
+# Verified fork head: 5505f69 (neo-brutalism, Live or Not status fix). The fork
 # source is removed after install to keep the image small; the global CLI is self-contained.
 # cli/ gets its own install first: its build script (buildMitm.js) needs
 # esbuild, which is a devDependency of the cli package, not of the app.
@@ -61,7 +61,7 @@ ENV NPM_CONFIG_CACHE=/tmp/npm-cache
 # cached layer and silently ships the previous fork code (this bit us on
 # 2026-11-19: a redeploy reported SUCCESS with a byte-identical image).
 # Bump this on every fork push.
-ARG NINE_ROUTER_COMMIT=31c8567459670831c1eee860b0ad5f1d21a0a538
+ARG NINE_ROUTER_COMMIT=5505f69e7f47d8625739eb4293a207bd328e17af
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean \
