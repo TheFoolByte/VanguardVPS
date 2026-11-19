@@ -1,12 +1,12 @@
 {
-  "name": "VanguardVPS · Ubuntu SSH + 9router + Hermes Agent",
-  "description": "Ubuntu 24.04 SSH VPS di Railway dengan Hermes Agent & 9router AI gateway. Akses root langsung. Setup AI di UI web 9router & Hermes Dashboard. Dev: TheFoolByte.",
-  "readme": "# VanguardVPS — Cloud AI Workspace\n\nUbuntu SSH + 9router + Hermes Agent di Railway. Klik Deploy, variabel boleh kosong.\n\nPassword default: `Vanguard123@`\n\n- SSH TCP port 22\n- 9router HTTP port 20128\n- Hermes Dashboard port 8686\n- Dual Auto-Backup: `GITHUB_TOKEN` + `GITHUB_REPO` / `HERMES_GITHUB_REPO`\n\nRepo: https://github.com/TheFoolByte/RailDK\n\n© VanguardVPS · TheFoolByte",
+  "name": "VanguardVPS · Ubuntu SSH + 9router",
+  "description": "Ubuntu 24.04 SSH VPS di Railway dengan 9router AI gateway. Akses root langsung. Setup AI di UI web 9router. Dev: TheFoolByte.",
+  "readme": "# VanguardVPS — Cloud AI Workspace\n\nUbuntu SSH + 9router di Railway. Klik Deploy, variabel boleh kosong.\n\nPassword default: `Vanguard123@`\n\n- SSH TCP port 22\n- 9router HTTP port 20128\n- Auto-Backup: `GITHUB_TOKEN` + `GITHUB_REPO`\n\nRepo: https://github.com/TheFoolByte/VanguardVPS\n\n© VanguardVPS · TheFoolByte",
   "services": [
     {
       "name": "vanguard-vps",
       "source": {
-        "repo": "https://github.com/TheFoolByte/RailDK",
+        "repo": "https://github.com/TheFoolByte/VanguardVPS",
         "branch": "main"
       },
       "build": {
@@ -19,8 +19,7 @@
           "src-sync.sh",
           "usage",
           "vanguard-welcome.sh",
-          "config.json",
-          "hermes-sync.sh"
+          "config.json"
         ]
       },
       "deploy": {
@@ -39,7 +38,7 @@
           "required": false,
           "secret": true,
           "defaultValue": "Vanguard123@",
-          "description": "Password root + login dashboard 9router & Hermes. Kosong = Vanguard123@."
+          "description": "Password root + login dashboard 9router. Kosong = Vanguard123@."
         },
         "GITHUB_TOKEN": {
           "required": false,
@@ -72,23 +71,6 @@
           "defaultValue": "180",
           "description": "Jeda sync /root/src (detik). Hanya dipakai kalau GITHUB_TOKEN diisi."
         },
-        "HERMES_ENABLED": {
-          "required": false,
-          "secret": false,
-          "defaultValue": "true",
-          "description": "Aktifkan Hermes Agent CLI, Web Dashboard, dan Gateway."
-        },
-        "HERMES_GITHUB_REPO": {
-          "required": false,
-          "secret": false,
-          "description": "Repo privat backup Hermes (state.db, memory, config). Kosong = auto buat vanguard-vps-hermes-<id>."
-        },
-        "HERMES_DASHBOARD_PORT": {
-          "required": false,
-          "secret": false,
-          "defaultValue": "8686",
-          "description": "Port web dashboard Hermes."
-        },
         "APP_LANG": {
           "required": false,
           "secret": false,
@@ -108,11 +90,6 @@
       },
       {
         "port": 20128,
-        "protocol": "http",
-        "service": "vanguard-vps"
-      },
-      {
-        "port": 8686,
         "protocol": "http",
         "service": "vanguard-vps"
       }

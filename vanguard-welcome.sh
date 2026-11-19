@@ -51,10 +51,7 @@ row " CPU     " "│" "${C_WHITE}${_cpu} ${C_GREY}(${_cores} cores)${C_RESET}"
 row " Memory  " "│" "${C_WHITE}${_mem}${C_RESET}"
 row " Disk    " "│" "${C_WHITE}${_disk}${C_RESET}"
 row " IP      " "│" "${C_WHITE}${_ip}${C_RESET}"
-_hport="$(jq -r '.hermes.dashboard_port // 8686' /etc/vanguard/config.json 2>/dev/null)"
-: "${_hport:=8686}"
 row " 9router " "│" "${C_GREEN}● :20128${C_RESET}"
-row " Hermes  " "│" "${C_GREEN}● :${_hport}${C_RESET} ${C_GREY}(gateway + web UI)${C_RESET}"
 
 if [ -f /var/lib/vanguard/src-repo ]; then
   _repo="$(cat /var/lib/vanguard/src-repo 2>/dev/null)"
@@ -64,18 +61,8 @@ else
 fi
 row " backup  " "│" "${_src}"
 
-if [ -f /var/lib/vanguard/hermes-repo ]; then
-  _hrepo="$(cat /var/lib/vanguard/hermes-repo 2>/dev/null)"
-  _hsrc="${C_GREEN}● synced → ${C_RESET}${C_WHITE}${_hrepo}${C_RESET}"
-else
-  _hsrc="${C_GREY}● off — set GITHUB_TOKEN to backup${C_RESET}"
-fi
-row " bkp-hms " "│" "${_hsrc}"
-
 printf '%s\n' "$line"
 printf "  ${C_GREEN}➜${C_RESET} ${C_DIM}9router UI${C_RESET} ${C_YELLOW}${C_BOLD}:20128${C_RESET} ${C_DIM}(password = root password)${C_RESET}\n"
-printf "  ${C_GREEN}➜${C_RESET} ${C_DIM}Hermes UI${C_RESET}  ${C_YELLOW}${C_BOLD}:${_hport}${C_RESET} ${C_DIM}(Hermes Web Dashboard)${C_RESET}\n"
-printf "  ${C_GREEN}➜${C_RESET} ${C_DIM}Hermes CLI${C_RESET} ${C_YELLOW}${C_BOLD}hermes${C_RESET} ${C_DIM}(interactive session)${C_RESET}\n"
 printf "  ${C_GREEN}➜${C_RESET} ${C_DIM}Run${C_RESET} ${C_YELLOW}${C_BOLD}usage${C_RESET} ${C_DIM}to check Railway trial credit${C_RESET}\n"
-printf "  ${C_GREEN}➜${C_RESET} ${C_DIM}Run${C_RESET} ${C_YELLOW}${C_BOLD}src-sync --status${C_RESET} ${C_DIM}or${C_RESET} ${C_YELLOW}${C_BOLD}hermes-sync --status${C_RESET}\n"
+printf "  ${C_GREEN}➜${C_RESET} ${C_DIM}Run${C_RESET} ${C_YELLOW}${C_BOLD}src-sync --status${C_RESET}\n"
 printf '\n'

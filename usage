@@ -130,22 +130,6 @@ bar() { # percent -> colored progress bar (no leading spaces)
 }
 
 # ---- render / نمایش ----
-echo "--- Hermes Gateway & Bots ---"
-if command -v hermes >/dev/null 2>&1; then
-  echo "Hermes CLI: installed ($(hermes --version 2>/dev/null || echo 'ready'))"
-  if pgrep -f "hermes gateway" >/dev/null 2>&1; then
-    echo "Hermes Gateway: RUNNING"
-  else
-    echo "Hermes Gateway: STOPPED (run 'hermes gateway run' or check config)"
-  fi
-  if pgrep -f "hermes dashboard" >/dev/null 2>&1; then
-    echo "Hermes Dashboard: RUNNING"
-  else
-    echo "Hermes Dashboard: STOPPED"
-  fi
-fi
-echo "---"
-
 printf '\n'
 printf "  ${C_CY}${B}VanguardVPS${R} ${C_GR}·${R} ${C_WH}${B}Railway Usage Monitor${R}\n"
 printf "  ${C_GR}────────────────────────────────────────────────\n${R}"

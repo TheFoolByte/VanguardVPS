@@ -10,7 +10,6 @@
         "src-sync.sh",
         "vanguard-welcome.sh",
         "config.json",
-        "hermes-sync.sh",
         "static/favicon.svg",
         "static/favicon.ico",
         "static/patch-favicon.py"

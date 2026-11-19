@@ -228,8 +228,6 @@ snapshot() {
   esac
   rsync -a --delete --max-size=90m \
     --exclude 'src/' \
-    --exclude 'src-hermes/' \
-    --exclude '.hermes/' \
     --exclude '.9router/' \
     "${exclude_nine[@]}" \
     --exclude '.cache/' \
@@ -269,10 +267,10 @@ apply_restore() {
   fi
   if [ -d "$SRC/files" ] && [ -n "$(ls -A "$SRC/files" 2>/dev/null)" ]; then
     mkdir -p "$safety/files"
-    rsync -a --exclude src --exclude src-hermes "$ROOT_FILES"/ "$safety/files/" \
+    rsync -a --exclude src "$ROOT_FILES"/ "$safety/files/" \
       || { echo "src-sync: cannot preserve current /root files" >&2; return 1; }
-    rsync -a "$SRC/files"/ "$ROOT_FILES"/ --exclude src --exclude src-hermes || {
-      rsync -a "$safety/files"/ "$ROOT_FILES"/ --exclude src --exclude src-hermes || true
+    rsync -a "$SRC/files"/ "$ROOT_FILES"/ --exclude src || {
+      rsync -a "$safety/files"/ "$ROOT_FILES"/ --exclude src || true
       echo "src-sync: files restore failed; safety copy at $safety/files" >&2; return 1;
     }
   fi

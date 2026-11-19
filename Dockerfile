@@ -1,4 +1,4 @@
-# VanguardVPS — Ubuntu 24.04 SSH + 9router + Hermes Agent
+# VanguardVPS — Ubuntu 24.04 SSH + 9router
 # Dev: TheFoolByte
 
 FROM ubuntu:24.04
@@ -53,17 +53,6 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && corepack enable \
     && npm install -g --allow-scripts=9router 9router
 
-# Install uv & Hermes Agent
-# NOTE: /root is a Railway volume at runtime, so anything installed under /root
-# (uv's default tool dir) disappears once the volume mounts. Keep the tool tree
-# and its binaries outside /root.
-ENV UV_TOOL_DIR=/opt/uv-tools \
-    UV_TOOL_BIN_DIR=/usr/local/bin
-RUN curl -fsSL https://astral.sh/uv/install.sh | sh \
-    && { mv /root/.local/bin/uv /root/.local/bin/uvx /usr/local/bin/ || true; } \
-    && uv tool install hermes-agent \
-    && hermes --version
-
 COPY static/favicon.svg static/favicon.ico static/patch-favicon.py /usr/local/share/vanguard/
 RUN sed -i 's/\r$//' /usr/local/share/vanguard/patch-favicon.py \
     && python3 /usr/local/share/vanguard/patch-favicon.py
@@ -71,12 +60,11 @@ RUN sed -i 's/\r$//' /usr/local/share/vanguard/patch-favicon.py \
 COPY ssh-user-config.sh /usr/local/bin/ssh-user-config.sh
 COPY usage /usr/local/bin/usage
 COPY src-sync.sh /usr/local/bin/src-sync
-COPY hermes-sync.sh /usr/local/bin/hermes-sync
 COPY config.json /etc/vanguard/config.json
-RUN sed -i 's/\r$//' /usr/local/bin/ssh-user-config.sh /usr/local/bin/usage /usr/local/bin/src-sync /usr/local/bin/hermes-sync /etc/profile.d/vanguard-welcome.sh /etc/vanguard/config.json \
-    && chmod +x /usr/local/bin/ssh-user-config.sh /usr/local/bin/usage /usr/local/bin/src-sync /usr/local/bin/hermes-sync /etc/profile.d/vanguard-welcome.sh \
-    && mkdir -p /root/src /root/src-hermes
+RUN sed -i 's/\r$//' /usr/local/bin/ssh-user-config.sh /usr/local/bin/usage /usr/local/bin/src-sync /etc/profile.d/vanguard-welcome.sh /etc/vanguard/config.json \
+    && chmod +x /usr/local/bin/ssh-user-config.sh /usr/local/bin/usage /usr/local/bin/src-sync /etc/profile.d/vanguard-welcome.sh \
+    && mkdir -p /root/src
 
-EXPOSE 22 20128 8686
+EXPOSE 22 20128
 
 CMD ["/usr/local/bin/ssh-user-config.sh"]

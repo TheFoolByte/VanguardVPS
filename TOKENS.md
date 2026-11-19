@@ -1,6 +1,6 @@
 # VanguardVPS · Token
 
-Tidak wajib untuk SSH atau 9router. Login dashboard 9router & Hermes = password root.
+Tidak wajib untuk SSH atau 9router. Login dashboard 9router = password root.
 
 ## GitHub — backup (opsional)
 
