@@ -1,7 +1,7 @@
 # VanguardVPS — Cloud AI Workspace (9router)
 
 Ubuntu 24.04 SSH VPS di [Railway](https://railway.com) lengkap dengan:
-- **[9router](https://github.com/decolua/9router)**: AI Proxy & Web Routing Dashboard (port 20128).
+- **[9router](https://github.com/TheFoolByte/9router)**: AI Proxy & Web Routing Dashboard (port 20128) — build modifikasi dari fork sendiri (branch `neo-brutalism`: Second Brain, Live or Not, UI neo-brutalism), bukan paket npm resmi.
 - **Auto-Backup GitHub**: Otomatis backup & restore ke 1 private repository (9router & data sistem).
 
 ---

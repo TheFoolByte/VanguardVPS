@@ -39,6 +39,14 @@ ENV LANGUAGE=en_US.UTF-8
 ENV TERM=xterm-256color
 
 # Node.js 22 LTS (pinned; includes corepack) + npm usable as root
+# 9Router is NOT installed from the official npm package anymore.
+# It is built from Jun's modified fork (TheFoolByte/9router, branch
+# neo-brutalism — Second Brain, Live or Not, neo-brutalism UI) and installed
+# globally from its cli/ package, so the `9router` command keeps working.
+# Verified fork head: c0fe429 (neo-brutalism). The fork source is removed
+# after install to keep the image small; the global CLI is self-contained.
+# cli/ gets its own install first: its build script (buildMitm.js) needs
+# esbuild, which is a devDependency of the cli package, not of the app.
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean \
@@ -51,7 +59,14 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && npm install -g npm@latest \
     && npm config set ignore-scripts false \
     && corepack enable \
-    && npm install -g --allow-scripts=9router 9router
+    && git clone --depth 1 --branch neo-brutalism https://github.com/TheFoolByte/9router.git /opt/9router-fork \
+    && cd /opt/9router-fork \
+    && npm install \
+    && npm --prefix cli install \
+    && NEXT_TELEMETRY_DISABLED=1 npm --prefix cli run build \
+    && npm install -g --allow-scripts=9router ./cli \
+    && cd / \
+    && rm -rf /opt/9router-fork
 
 COPY static/favicon.svg static/favicon.ico static/patch-favicon.py /usr/local/share/vanguard/
 RUN sed -i 's/\r$//' /usr/local/share/vanguard/patch-favicon.py \
