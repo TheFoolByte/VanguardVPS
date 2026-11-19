@@ -47,6 +47,10 @@ ENV TERM=xterm-256color
 # after install to keep the image small; the global CLI is self-contained.
 # cli/ gets its own install first: its build script (buildMitm.js) needs
 # esbuild, which is a devDependency of the cli package, not of the app.
+# Install from a tarball, not from the directory: `npm install -g ./cli`
+# only symlinks the global package to the fork source, and the fork source
+# is deleted below, which leaves a dangling link and breaks the favicon
+# patch (and the `9router` command). A tarball install copies the files.
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean \
@@ -64,7 +68,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && npm install \
     && npm --prefix cli install \
     && NEXT_TELEMETRY_DISABLED=1 npm --prefix cli run build \
-    && npm install -g --allow-scripts=9router ./cli \
+    && TARBALL=$(npm pack ./cli | tail -n 1) \
+    && npm install -g --allow-scripts=9router "./$TARBALL" \
     && cd / \
     && rm -rf /opt/9router-fork
 
