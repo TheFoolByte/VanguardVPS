@@ -48,14 +48,20 @@ ENV NPM_CONFIG_CACHE=/tmp/npm-cache
 # It is built from Jun's modified fork (TheFoolByte/9router, branch
 # neo-brutalism — Second Brain, Live or Not, neo-brutalism UI) and installed
 # globally from its cli/ package, so the `9router` command keeps working.
-# Verified fork head: c0fe429 (neo-brutalism). The fork source is removed
-# after install to keep the image small; the global CLI is self-contained.
+# Verified fork head: 31c8567 (neo-brutalism, Live or Not gate). The fork
+# source is removed after install to keep the image small; the global CLI is self-contained.
 # cli/ gets its own install first: its build script (buildMitm.js) needs
 # esbuild, which is a devDependency of the cli package, not of the app.
 # Install from a tarball, not from the directory: `npm install -g ./cli`
 # only symlinks the global package to the fork source, and the fork source
 # is deleted below, which leaves a dangling link and breaks the favicon
 # patch (and the `9router` command). A tarball install copies the files.
+# Pin the exact fork commit this image builds. The git clone lives inside a
+# Docker layer: without the commit in the command, a rebuild reuses the
+# cached layer and silently ships the previous fork code (this bit us on
+# 2026-11-19: a redeploy reported SUCCESS with a byte-identical image).
+# Bump this on every fork push.
+ARG NINE_ROUTER_COMMIT=31c8567459670831c1eee860b0ad5f1d21a0a538
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean \
@@ -70,6 +76,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && corepack enable \
     && git clone --depth 1 --branch neo-brutalism https://github.com/TheFoolByte/9router.git /opt/9router-fork \
     && cd /opt/9router-fork \
+    && git fetch --depth 1 origin "$NINE_ROUTER_COMMIT" \
+    && git checkout "$NINE_ROUTER_COMMIT" \
     && npm install \
     && npm --prefix cli install \
     && NEXT_TELEMETRY_DISABLED=1 npm --prefix cli run build \
